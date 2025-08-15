@@ -2,7 +2,7 @@
 # Streamlit bilingual question generator (English/Kannada)
 
 import streamlit as st
-from transformers import MT5ForConditionalGeneration, MT5Tokenizer
+from transformers import T5ForConditionalGeneration, T5Tokenizer, AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 import random
 import re
@@ -45,24 +45,34 @@ language = st.sidebar.selectbox("Select Language / ಭಾಷೆ ಆಯ್ಕೆ�
 lang_code = "en" if language == "English" else "kn"
 stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
 
-# --- Load multilingual T5 model for WH question generation ---
+# --- Load models ---
 @st.cache_resource(show_spinner=True)
-def load_model():
-    model_name = "google/mt5-small"  # multilingual T5
-    tokenizer = MT5Tokenizer.from_pretrained(model_name)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = MT5ForConditionalGeneration.from_pretrained(model_name).to(device)
-    return tokenizer, model
+def load_models():
+    # English WH QG model
+    tokenizer_en = T5Tokenizer.from_pretrained("valhalla/t5-small-qg-hl")
+    model_en = T5ForConditionalGeneration.from_pretrained("valhalla/t5-small-qg-hl").to("cuda" if torch.cuda.is_available() else "cpu")
 
-tokenizer, model = load_model()
+    # Kannada WH QG model
+    tokenizer_kn = AutoTokenizer.from_pretrained("ai4bharat/MultiIndicQuestionGenerationSS", do_lower_case=False, use_fast=False, keep_accents=True)
+    model_kn = AutoModelForSeq2SeqLM.from_pretrained("ai4bharat/MultiIndicQuestionGenerationSS").to("cuda" if torch.cuda.is_available() else "cpu")
+
+    return tokenizer_en, model_en, tokenizer_kn, model_kn
+
+tokenizer_en, model_en, tokenizer_kn, model_kn = load_models()
 
 # --- Helper functions ---
-def generate_wh_question(sentence):
-    # prepend instruction in English or Kannada
-    prompt = "generate question: " + sentence
-    inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
-    outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
-    question = tokenizer.decode(outputs[0], skip_special_tokens=True)
+def generate_wh_question(sentence, lang_code):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if lang_code == "en":
+        prompt = f"generate question: {sentence}"
+        inputs = tokenizer_en.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
+        outputs = model_en.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
+        question = tokenizer_en.decode(outputs[0], skip_special_tokens=True)
+    else:
+        prompt = f"question: {sentence}"
+        inputs = tokenizer_kn.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
+        outputs = model_kn.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
+        question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True)
     return question
 
 def generate_true_false(sentence):
@@ -132,7 +142,7 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
 
     for idx, sent in enumerate(sentences):
         if idx < max_wh:
-            questions["WH"].append({"question": generate_wh_question(sent), "answer": sent})
+            questions["WH"].append({"question": generate_wh_question(sent, lang_code), "answer": sent})
         tf_question, tf_answer = generate_true_false(sent)
         questions["TrueFalse"].append({"question": tf_question, "answer": tf_answer})
         fb_question, fb_answer = generate_fill_blank(sent)
