@@ -8,20 +8,16 @@ import random
 import nltk
 import os
 
-# Add your NLTK data path (where punkt_tab is downloaded)
-nltk_data_path = r"C:\Users\Elaine M Paily\AppData\Roaming\nltk_data"
-nltk.data.path.append(nltk_data_path)
-
 # Ensure required resources are available
 try:
-    nltk.data.find('tokenizers/punkt_tab/english')
+    nltk.data.find('tokenizers/punkt/english')
 except LookupError:
-    nltk.download('punkt_tab', download_dir=nltk_data_path)
+    nltk.download('punkt')
 
 try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
-    nltk.download('stopwords', download_dir=nltk_data_path)
+    nltk.download('stopwords')
 
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
@@ -75,13 +71,22 @@ def generate_mcq(sentence):
     words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
     if not words:
         return None, None, None
+
     answer = random.choice(words)
     words.remove(answer)
-    options = [answer]
-    dummy_options = ["OptionA", "OptionB", "OptionC", "OptionD"]
-    fake_options = random.sample(words, k=min(3, len(words))) if len(words) >= 3 else dummy_options[:3]
-    options.extend(fake_options)
+
+    # Pick 3 other meaningful words from the sentence or paragraph as fake options
+    if len(words) >= 3:
+        fake_options = random.sample(words, 3)
+    else:
+        fake_options = words.copy()
+        # Fill remaining with random short words as fallback
+        dummy_options = ["Apple", "River", "Book", "Tree"]
+        fake_options.extend(dummy_options[:3-len(fake_options)])
+
+    options = [answer] + fake_options
     random.shuffle(options)
+
     question = sentence.replace(answer, "_____", 1)
     return question, options, answer
 
