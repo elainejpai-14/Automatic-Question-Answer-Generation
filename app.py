@@ -120,7 +120,7 @@ def generate_questions_from_paragraph(paragraph):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Offline Question Generator", layout="wide")
-st.title("📚 Offline Question Generator")
+st.title("Automatic Q&A Generator")
 
 st.markdown("Enter a paragraph below, and the app will generate multiple types of questions.")
 
