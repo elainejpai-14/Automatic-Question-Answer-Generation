@@ -8,14 +8,11 @@ import random
 import nltk
 import os
 
-# Set a proper NLTK data path
 nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
-if not os.path.exists(nltk_data_dir):
-    os.makedirs(nltk_data_dir)
-
+os.makedirs(nltk_data_dir, exist_ok=True)
 nltk.data.path.append(nltk_data_dir)
 
-# Download punkt if not already present
+# Download standard punkt tokenizer if not already present
 try:
     nltk.data.find("tokenizers/punkt")
 except LookupError:
