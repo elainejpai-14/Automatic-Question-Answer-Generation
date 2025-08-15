@@ -1,23 +1,11 @@
 # app.py
-# Streamlit offline question generator (fully friendly for cloud)
+# Streamlit offline question generator (fully cloud-friendly, NLTK removed)
 
 import streamlit as st
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
-import nltk
-import os
-from nltk.tokenize import sent_tokenize
-
-# --- NLTK punkt setup ---
-nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
-if not os.path.exists(nltk_data_dir):
-    os.makedirs(nltk_data_dir)
-nltk.data.path.append(nltk_data_dir)
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt", download_dir=nltk_data_dir)
+import re
 
 # --- Built-in stopwords list (offline-friendly) ---
 stop_words = set([
@@ -94,7 +82,7 @@ def generate_mcq(sentence):
 def generate_matching(sentences):
     left, right = [], []
     for sent in sentences:
-        words = nltk.pos_tag(sent.split())
+        words = [(w, "NN") for w in sent.split()]  # simplified POS tagging
         nouns = [w for w, pos in words if pos.startswith("NN")]
         if nouns:
             left.append(sent)
@@ -106,8 +94,13 @@ def generate_matching(sentences):
     pairs = [{"left": l, "right": r} for l, r in zip(left, shuffled_right)]
     return pairs
 
+# --- Simple regex-based sentence tokenizer ---
+def simple_sent_tokenize(text):
+    sentences = re.split(r'(?<=[.!?]) +', text.strip())
+    return [s for s in sentences if s]
+
 def generate_questions_from_paragraph(paragraph, max_wh=5):
-    sentences = sent_tokenize(paragraph)
+    sentences = simple_sent_tokenize(paragraph)
     questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
 
     for idx, sent in enumerate(sentences):
