@@ -6,6 +6,7 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
 import nltk
+nltk.download('punkt')
 import os
 
 nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
@@ -106,7 +107,7 @@ def generate_matching(sentences):
     return pairs
 
 def generate_questions_from_paragraph(paragraph, max_wh=5):
-    sentences = sent_tokenize(paragraph, language="english")
+    sentences = sent_tokenize(paragraph)
     questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
 
     for idx, sent in enumerate(sentences):
