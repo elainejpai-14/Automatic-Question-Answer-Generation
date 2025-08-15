@@ -5,26 +5,25 @@ import streamlit as st
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
-import os
 import nltk
-nltk.download('punkt', quiet=True)
-nltk.download('averaged_perceptron_tagger', quiet=True)
+import os
 
-# --- Ensure punkt downloaded in a folder Streamlit can access ---
+# --- offline-safe NLTK setup ---
 nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
-if not os.path.exists(nltk_data_path):
-    os.makedirs(nltk_data_path)
+os.makedirs(nltk_data_path, exist_ok=True)
 nltk.data.path.append(nltk_data_path)
+
+# Only download if not present
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
-    nltk.download('punkt', download_dir=nltk_data_path)
-    
-from nltk.tokenize import sent_tokenize
+    nltk.download('punkt', download_dir=nltk_data_path, quiet=True)
 
-from nltk.corpus import stopwords
-nltk.download('stopwords', download_dir=nltk_data_path)
-stop_words = set(stopwords.words('english'))
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords', download_dir=nltk_data_path, quiet=True)
+from nltk.tokenize import sent_tokenize
 
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
