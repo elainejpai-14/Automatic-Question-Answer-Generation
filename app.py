@@ -1,5 +1,5 @@
 # app.py
-# Streamlit offline question generator (fully cloud-friendly, NLTK removed)
+# Streamlit bilingual question generator (English/Kannada)
 
 import streamlit as st
 from transformers import T5ForConditionalGeneration, T5Tokenizer
@@ -7,19 +7,48 @@ import torch
 import random
 import re
 import pandas as pd
-from io import StringIO
 
-# --- Built-in stopwords list (offline-friendly) ---
-stop_words = set([
+# --- UI text dictionary ---
+UI_TEXT = {
+    "en": {
+        "title": "Automatic Q&A Generator",
+        "desc": "Enter a paragraph below, and the app will generate multiple types of questions.",
+        "input": "Paste your paragraph here:",
+        "generate_btn": "Generate Questions",
+        "warning": "Please enter a paragraph!",
+        "download": "Download as CSV"
+    },
+    "kn": {
+        "title": "ಸ್ವಯಂಚಾಲಿತ ಪ್ರಶ್ನೆ-ಉತ್ತರ ತಯಾರಕ",
+        "desc": "ಕೆಳಗಿನ ಪ್ಯಾರಾಗ್ರಾಫ್ ಅನ್ನು ನಮೂದಿಸಿ, ಅಪ್ಲಿಕೇಶನ್ ವಿವಿಧ ರೀತಿಯ ಪ್ರಶ್ನೆಗಳನ್ನು ತಯಾರಿಸುತ್ತದೆ.",
+        "input": "ನಿಮ್ಮ ಪ್ಯಾರಾಗ್ರಾಫ್ ಅನ್ನು ಇಲ್ಲಿ ಹಾಕಿ:",
+        "generate_btn": "ಪ್ರಶ್ನೆಗಳನ್ನು ತಯಾರಿಸಿ",
+        "warning": "ದಯವಿಟ್ಟು ಪ್ಯಾರಾಗ್ರಾಫ್ ನಮೂದಿಸಿ!",
+        "download": "CSV ಆಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ"
+    }
+}
+
+# --- Stopwords ---
+STOP_WORDS_EN = set([
     "a", "an", "the", "and", "or", "but", "if", "while", "with",
     "is", "are", "was", "were", "has", "have", "had", "of", "in", "on", "for",
     "to", "from", "by", "as", "at", "that", "this", "it"
 ])
 
-# --- Load T5 model for WH question generation ---
+STOP_WORDS_KN = set([
+    "ಆಗ", "ಅವರು", "ಅನ್ನು", "ಅಲ್ಲಿ", "ಇದ್ದ", "ಇದೆ", "ಮತ್ತು", "ಅದನ್ನು",
+    "ಅಥವಾ", "ಆದರೆ", "ಇದೆ", "ಇದ್ದವು", "ಇದನ್ನು", "ಅವರು"
+])
+
+# --- Language selection ---
+language = st.sidebar.selectbox("Select Language / ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ", ["English", "ಕನ್ನಡ"])
+lang_code = "en" if language == "English" else "kn"
+stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
+
+# --- Load multilingual T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
 def load_model():
-    model_name = "valhalla/t5-small-qg-hl"
+    model_name = "google/mt5-small"  # multilingual T5
     tokenizer = T5Tokenizer.from_pretrained(model_name)
     model = T5ForConditionalGeneration.from_pretrained(model_name)
     return tokenizer, model
@@ -28,8 +57,9 @@ tokenizer, model = load_model()
 
 # --- Helper functions ---
 def generate_wh_question(sentence):
-    input_text = "generate question: " + sentence
-    inputs = tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
+    # prepend instruction in English or Kannada
+    prompt = "generate question: " + sentence
+    inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
     outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
     question = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return question
@@ -64,18 +94,14 @@ def generate_mcq(sentence):
     words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
     if not words:
         return None, None, None
-
     answer = random.choice(words)
     words.remove(answer)
-
-    # Pick 3 other meaningful words as fake options
     if len(words) >= 3:
         fake_options = random.sample(words, 3)
     else:
         fake_options = words.copy()
         dummy_options = ["Apple", "River", "Book", "Tree"]
         fake_options.extend(dummy_options[:3-len(fake_options)])
-
     options = [answer] + fake_options
     random.shuffle(options)
     question = sentence.replace(answer, "_____", 1)
@@ -84,7 +110,7 @@ def generate_mcq(sentence):
 def generate_matching(sentences):
     left, right = [], []
     for sent in sentences:
-        words = [(w, "NN") for w in sent.split()]  # simplified POS tagging
+        words = [(w, "NN") for w in sent.split()]
         nouns = [w for w, pos in words if pos.startswith("NN")]
         if nouns:
             left.append(sent)
@@ -93,26 +119,24 @@ def generate_matching(sentences):
         return []
     shuffled_right = right.copy()
     random.shuffle(shuffled_right)
-    pairs = [{"left": l, "right": r} for l, r in zip(left, shuffled_right)]
-    return pairs
+    return [{"left": l, "right": r} for l, r in zip(left, shuffled_right)]
 
-# --- Simple regex-based sentence tokenizer ---
 def simple_sent_tokenize(text):
     sentences = re.split(r'(?<=[.!?]) +', text.strip())
     return [s for s in sentences if s]
 
 def generate_questions_from_paragraph(paragraph, max_wh=5):
     sentences = simple_sent_tokenize(paragraph)
-    questions = {"WH": [], "True or False": [], "Fill in the Blank": [], "MCQ": [], "Matching": []}
+    questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
 
     for idx, sent in enumerate(sentences):
         if idx < max_wh:
             questions["WH"].append({"question": generate_wh_question(sent), "answer": sent})
         tf_question, tf_answer = generate_true_false(sent)
-        questions["True or False"].append({"question": tf_question, "answer": tf_answer})
+        questions["TrueFalse"].append({"question": tf_question, "answer": tf_answer})
         fb_question, fb_answer = generate_fill_blank(sent)
         if fb_question:
-            questions["Fill in the Blank"].append({"question": fb_question, "answer": fb_answer})
+            questions["FillBlank"].append({"question": fb_question, "answer": fb_answer})
         mcq_question, options, mcq_answer = generate_mcq(sent)
         if mcq_question:
             questions["MCQ"].append({"question": mcq_question, "options": options, "answer": mcq_answer})
@@ -121,15 +145,15 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
     return questions
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Automatic Q&A Generator", layout="wide")
-st.title("Automatic Q&A Generator")
-st.markdown("Enter a paragraph below, and the app will generate multiple types of questions.")
+st.set_page_config(page_title=UI_TEXT[lang_code]["title"], layout="wide")
+st.title(UI_TEXT[lang_code]["title"])
+st.markdown(UI_TEXT[lang_code]["desc"])
 
-paragraph_input = st.text_area("Paste your paragraph here:", height=200)
+paragraph_input = st.text_area(UI_TEXT[lang_code]["input"], height=200)
 
-if st.button("Generate Questions"):
+if st.button(UI_TEXT[lang_code]["generate_btn"]):
     if paragraph_input.strip() == "":
-        st.warning("Please enter a paragraph!")
+        st.warning(UI_TEXT[lang_code]["warning"])
     else:
         with st.spinner("Generating questions..."):
             qa_pairs = generate_questions_from_paragraph(paragraph_input)
@@ -148,7 +172,7 @@ if st.button("Generate Questions"):
                         st.markdown(f"**Q{idx}:** {q['question']}")
                         st.markdown(f"**Answer:** {q['answer']}")
 
-         # --- Prepare CSV for download ---
+        # --- Prepare CSV for download ---
         all_rows = []
         for qtype, qlist in qa_pairs.items():
             if qtype != "Matching":
@@ -164,7 +188,7 @@ if st.button("Generate Questions"):
         df = pd.DataFrame(all_rows)
         csv = df.to_csv(index=False)
         st.download_button(
-            label="Download as CSV",
+            label=UI_TEXT[lang_code]["download"],
             data=csv,
             file_name="generated_questions.csv",
             mime="text/csv"
