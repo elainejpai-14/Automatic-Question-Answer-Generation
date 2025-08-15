@@ -1,5 +1,5 @@
 # app.py
-# Streamlit offline question generator (improved)
+# Streamlit offline question generator (fully friendly for cloud)
 
 import streamlit as st
 from transformers import T5ForConditionalGeneration, T5Tokenizer
@@ -8,38 +8,28 @@ import random
 import nltk
 import os
 from nltk.tokenize import sent_tokenize
-from nltk.corpus import stopwords
 
+# --- NLTK punkt setup ---
 nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
 if not os.path.exists(nltk_data_dir):
     os.makedirs(nltk_data_dir)
-
 nltk.data.path.append(nltk_data_dir)
-
-# Ensure punkt is downloaded
 try:
     nltk.data.find("tokenizers/punkt")
 except LookupError:
     nltk.download("punkt", download_dir=nltk_data_dir)
 
-# Ensure stopwords are downloaded
-try:
-    stop_words = set(stopwords.words("english"))
-except LookupError:
-    try:
-        nltk.download("stopwords", download_dir=nltk_data_dir)
-        stop_words = set(stopwords.words("english"))
-    except:
-        # fallback: use a minimal built-in stopwords list
-        stop_words = set([
-            "a", "an", "the", "and", "or", "but", "if", "while", "with", "is",
-            "are", "was", "were", "has", "have", "had", "of", "in", "on", "for"
-        ])
-        
+# --- Built-in stopwords list (offline-friendly) ---
+stop_words = set([
+    "a", "an", "the", "and", "or", "but", "if", "while", "with",
+    "is", "are", "was", "were", "has", "have", "had", "of", "in", "on", "for",
+    "to", "from", "by", "as", "at", "that", "this", "it"
+])
+
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
 def load_model():
-    model_name = "valhalla/t5-small-qg-hl"  # small and fast for offline use
+    model_name = "valhalla/t5-small-qg-hl"
     tokenizer = T5Tokenizer.from_pretrained(model_name)
     model = T5ForConditionalGeneration.from_pretrained(model_name)
     return tokenizer, model
@@ -88,18 +78,16 @@ def generate_mcq(sentence):
     answer = random.choice(words)
     words.remove(answer)
 
-    # Pick 3 other meaningful words from the sentence or paragraph as fake options
+    # Pick 3 other meaningful words as fake options
     if len(words) >= 3:
         fake_options = random.sample(words, 3)
     else:
         fake_options = words.copy()
-        # Fill remaining with random short words as fallback
         dummy_options = ["Apple", "River", "Book", "Tree"]
         fake_options.extend(dummy_options[:3-len(fake_options)])
 
     options = [answer] + fake_options
     random.shuffle(options)
-
     question = sentence.replace(answer, "_____", 1)
     return question, options, answer
 
@@ -138,7 +126,7 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
     return questions
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Offline Question Generator", layout="wide")
+st.set_page_config(page_title="Automatic Q&A Generator", layout="wide")
 st.title("Automatic Q&A Generator")
 st.markdown("Enter a paragraph below, and the app will generate multiple types of questions.")
 
