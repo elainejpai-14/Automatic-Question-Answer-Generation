@@ -16,9 +16,9 @@ if not os.path.exists(nltk_data_dir):
 nltk.data.path.append(nltk_data_dir)
 
 # Download required resources
-for pkg in ["punkt_tab", "stopwords"]:
+for pkg in ["punkt", "stopwords"]:
     try:
-        nltk.data.find(f"tokenizers/{pkg}" if pkg=="punkt_tab" else f"corpora/{pkg}")
+        nltk.data.find(f"tokenizers/{pkg}" if pkg=="punkt" else f"corpora/{pkg}")
     except LookupError:
         nltk.download(pkg, download_dir=nltk_data_dir)
 
