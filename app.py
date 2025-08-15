@@ -6,6 +6,8 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
 import re
+import pandas as pd
+from io import StringIO
 
 # --- Built-in stopwords list (offline-friendly) ---
 stop_words = set([
@@ -145,3 +147,25 @@ if st.button("Generate Questions"):
                     else:
                         st.markdown(f"**Q{idx}:** {q['question']}")
                         st.markdown(f"**Answer:** {q['answer']}")
+
+         # --- Prepare CSV for download ---
+        all_rows = []
+        for qtype, qlist in qa_pairs.items():
+            if qtype != "Matching":
+                for q in qlist:
+                    row = {"Type": qtype, "Question": q['question'], "Answer": q['answer']}
+                    if qtype == "MCQ":
+                        row["Options"] = ", ".join(q['options'])
+                    all_rows.append(row)
+            else:
+                for q in qlist:
+                    all_rows.append({"Type": "Matching", "Question": q['left'], "Answer": q['right'], "Options": ""})
+
+        df = pd.DataFrame(all_rows)
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download Questions as CSV",
+            data=csv,
+            file_name="generated_questions.csv",
+            mime="text/csv"
+        )
