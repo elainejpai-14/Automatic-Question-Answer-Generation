@@ -109,7 +109,7 @@ def generate_matching(sentences):
     return pairs
 
 def generate_questions_from_paragraph(paragraph, max_wh=5):
-    sentences = sent_tokenize(paragraph)
+    sentences = sent_tokenize(paragraph, language="english")
     questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
 
     for idx, sent in enumerate(sentences):
