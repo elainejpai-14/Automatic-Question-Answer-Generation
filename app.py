@@ -2,7 +2,7 @@
 # Streamlit bilingual question generator (English/Kannada)
 
 import streamlit as st
-from transformers import T5ForConditionalGeneration, T5Tokenizer
+from transformers import MT5ForConditionalGeneration, MT5Tokenizer
 import torch
 import random
 import re
@@ -49,9 +49,9 @@ stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
 @st.cache_resource(show_spinner=True)
 def load_model():
     model_name = "google/mt5-small"  # multilingual T5
-    tokenizer = T5Tokenizer.from_pretrained(model_name)
+    tokenizer = MT5Tokenizer.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = T5ForConditionalGeneration.from_pretrained(model_name).to(device)
+    model = MT5ForConditionalGeneration.from_pretrained(model_name).to(device)
     return tokenizer, model
 
 tokenizer, model = load_model()
