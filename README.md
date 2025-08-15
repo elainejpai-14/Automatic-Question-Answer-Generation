@@ -61,12 +61,9 @@ The quality of the generated WH-questions is assessed using:
 
 - SacreBLEU: A standardized version of BLEU for better reproducibility.
 
-English-<br>
-"BLEU":0.3516<br>
-"SacreBLEU":36.5355<br>
-
-Kannada-<br>
-"BLEU":0.4541<br>
-"SacreBLEU":43.9352<br>
+| Language  | BLEU Score | SacreBLEU Score |
+|-----------|------------|----------------|
+| English   | 0.3516     | 36.5355        |
+| Kannada   | 0.4541     | 43.9352        |
 
 Streamlit app deployed: https://automatic-question-answer-generation.streamlit.app/
