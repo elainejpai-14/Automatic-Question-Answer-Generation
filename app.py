@@ -8,20 +8,19 @@ import random
 import nltk
 import os
 
-# List of required NLTK packages
-nltk_packages = ["punkt", "stopwords"]
+# Set temporary nltk path
+nltk_data_dir = "/tmp/nltk_data"
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
 
-# Download packages if not already available
-for pkg in nltk_packages:
+nltk.data.path.append(nltk_data_dir)
+
+# Download required resources
+for pkg in ["punkt_tab", "stopwords"]:
     try:
-        # Try default location
-        nltk.data.find(f"tokenizers/{pkg}") if pkg == "punkt" else nltk.data.find(f"corpora/{pkg}")
+        nltk.data.find(f"tokenizers/{pkg}" if pkg=="punkt_tab" else f"corpora/{pkg}")
     except LookupError:
-        # Download to /tmp folder on Streamlit Cloud
-        nltk.download(pkg, download_dir="/tmp")
-
-# Add /tmp to NLTK search path
-nltk.data.path.append("/tmp")
+        nltk.download(pkg, download_dir=nltk_data_dir)
 
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
