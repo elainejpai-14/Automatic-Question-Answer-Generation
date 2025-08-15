@@ -50,7 +50,8 @@ stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
 def load_model():
     model_name = "google/mt5-small"  # multilingual T5
     tokenizer = T5Tokenizer.from_pretrained(model_name)
-    model = T5ForConditionalGeneration.from_pretrained(model_name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = T5ForConditionalGeneration.from_pretrained(model_name).to(device)
     return tokenizer, model
 
 tokenizer, model = load_model()
