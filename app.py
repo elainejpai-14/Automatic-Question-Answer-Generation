@@ -8,16 +8,20 @@ import random
 import nltk
 import os
 
-# Ensure required resources are available
-try:
-    nltk.data.find('tokenizers/punkt/english')
-except LookupError:
-    nltk.download('punkt')
+# List of required NLTK packages
+nltk_packages = ["punkt", "stopwords"]
 
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+# Download packages if not already available
+for pkg in nltk_packages:
+    try:
+        # Try default location
+        nltk.data.find(f"tokenizers/{pkg}") if pkg == "punkt" else nltk.data.find(f"corpora/{pkg}")
+    except LookupError:
+        # Download to /tmp folder on Streamlit Cloud
+        nltk.download(pkg, download_dir="/tmp")
+
+# Add /tmp to NLTK search path
+nltk.data.path.append("/tmp")
 
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
