@@ -1,5 +1,5 @@
 # app.py
-# Streamlit bilingual question generator (English/Kannada)
+# Streamlit bilingual question generator (English/Kannada) with WH metrics
 
 import streamlit as st
 from transformers import T5ForConditionalGeneration, T5Tokenizer, AutoTokenizer, AutoModelForSeq2SeqLM
@@ -7,6 +7,7 @@ import torch
 import random
 import re
 import pandas as pd
+from sklearn.metrics import bleu_score, sacrebleu
 
 # --- UI text dictionary ---
 UI_TEXT = {
@@ -40,8 +41,11 @@ STOP_WORDS_KN = set([
     "ಅಥವಾ", "ಆದರೆ", "ಇದೆ", "ಇದ್ದವು", "ಇದನ್ನು", "ಅವರು"
 ])
 
-# --- Language selection ---
+# --- Sidebar controls ---
 language = st.sidebar.selectbox("Select Language / ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ", ["English", "ಕನ್ನಡ"])
+view_metrics = st.sidebar.button("View Metrics")
+
+# Determine language code for Q&A generation page
 lang_code = "en" if language == "English" else "kn"
 stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
 
@@ -155,52 +159,97 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
     questions["Matching"] = generate_matching(sentences)
     return questions
 
-# --- Streamlit UI ---
-st.set_page_config(page_title=UI_TEXT[lang_code]["title"], layout="wide")
-st.title(UI_TEXT[lang_code]["title"])
-st.markdown(UI_TEXT[lang_code]["desc"])
+# --- Evaluation metrics for WH questions ---
+def compute_wh_metrics(paragraphs):
+    metrics = {"English": {}, "Kannada": {}}
+    for lang, tokenizer, model in [("English", tokenizer_en, model_en), ("Kannada", tokenizer_kn, model_kn)]:
+        references, hypotheses = [], []
+        for para in paragraphs:
+            sentences = simple_sent_tokenize(para)
+            for sent in sentences[:5]:
+                # Generate WH question
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                prompt = f"generate question: {sent}" if lang=="English" else f"question: {sent}"
+                inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
+                outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
+                question = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                hypotheses.append(question)
+                references.append([sent])  # Reference is original sentence
 
-paragraph_input = st.text_area(UI_TEXT[lang_code]["input"], height=200)
+        # Compute BLEU and SacreBLEU
+        bleu = bleu_score.corpus_bleu([[ref] for ref in references], hypotheses)
+        sacre = sacrebleu.corpus_bleu(hypotheses, [references])
+        metrics[lang]["BLEU"] = round(bleu, 4)
+        metrics[lang]["SacreBLEU"] = round(sacre.score, 4)
+    return metrics
 
-if st.button(UI_TEXT[lang_code]["generate_btn"]):
-    if paragraph_input.strip() == "":
-        st.warning(UI_TEXT[lang_code]["warning"])
-    else:
-        with st.spinner("Generating questions..."):
-            qa_pairs = generate_questions_from_paragraph(paragraph_input)
+# --- Streamlit pages ---
+if view_metrics:
+    st.title("WH Question Generation Metrics (English Only)")
+    st.markdown("Metrics are computed for WH questions only, separately for English and Kannada models.")
+    
+    # Sample paragraphs for evaluation
+    sample_paragraphs = [
+        "Albert Einstein was a German-born theoretical physicist who developed the theory of relativity.",
+        "The Nile is the longest river in Africa and has been essential to Egyptian civilization.",
+        "Kannada is a Dravidian language spoken predominantly in the state of Karnataka, India."
+    ]
+    metrics = compute_wh_metrics(sample_paragraphs)
 
-        for qtype, qlist in qa_pairs.items():
-            with st.expander(f"{qtype} Questions ({len(qlist)})", expanded=False):
-                for idx, q in enumerate(qlist, 1):
-                    if qtype == "MCQ":
-                        st.markdown(f"**Q{idx}:** {q['question']}")
-                        for opt in q['options']:
-                            st.markdown(f"- {opt}")
-                        st.markdown(f"**Answer:** {q['answer']}")
-                    elif qtype == "Matching":
-                        st.markdown(f"**Pair {idx}:** Left -> {q['left']} | Right -> {q['right']}")
-                    else:
-                        st.markdown(f"**Q{idx}:** {q['question']}")
-                        st.markdown(f"**Answer:** {q['answer']}")
+    st.subheader("English WH Question Metrics")
+    st.markdown(f"- BLEU Score: {metrics['English']['BLEU']}")
+    st.markdown(f"- SacreBLEU Score: {metrics['English']['SacreBLEU']}")
 
-        # --- Prepare CSV for download ---
-        all_rows = []
-        for qtype, qlist in qa_pairs.items():
-            if qtype != "Matching":
-                for q in qlist:
-                    row = {"Type": qtype, "Question": q['question'], "Answer": q['answer']}
-                    if qtype == "MCQ":
-                        row["Options"] = ", ".join(q['options'])
-                    all_rows.append(row)
-            else:
-                for q in qlist:
-                    all_rows.append({"Type": "Matching", "Question": q['left'], "Answer": q['right'], "Options": ""})
+    st.subheader("Kannada WH Question Metrics")
+    st.markdown(f"- BLEU Score: {metrics['Kannada']['BLEU']}")
+    st.markdown(f"- SacreBLEU Score: {metrics['Kannada']['SacreBLEU']}")
+else:
+    # Main Q&A Generation Page
+    st.set_page_config(page_title=UI_TEXT[lang_code]["title"], layout="wide")
+    st.title(UI_TEXT[lang_code]["title"])
+    st.markdown(UI_TEXT[lang_code]["desc"])
 
-        df = pd.DataFrame(all_rows)
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label=UI_TEXT[lang_code]["download"],
-            data=csv,
-            file_name="generated_questions.csv",
-            mime="text/csv"
-        )
+    paragraph_input = st.text_area(UI_TEXT[lang_code]["input"], height=200)
+
+    if st.button(UI_TEXT[lang_code]["generate_btn"]):
+        if paragraph_input.strip() == "":
+            st.warning(UI_TEXT[lang_code]["warning"])
+        else:
+            with st.spinner("Generating questions..."):
+                qa_pairs = generate_questions_from_paragraph(paragraph_input)
+
+            for qtype, qlist in qa_pairs.items():
+                with st.expander(f"{qtype} Questions ({len(qlist)})", expanded=False):
+                    for idx, q in enumerate(qlist, 1):
+                        if qtype == "MCQ":
+                            st.markdown(f"**Q{idx}:** {q['question']}")
+                            for opt in q['options']:
+                                st.markdown(f"- {opt}")
+                            st.markdown(f"**Answer:** {q['answer']}")
+                        elif qtype == "Matching":
+                            st.markdown(f"**Pair {idx}:** Left -> {q['left']} | Right -> {q['right']}")
+                        else:
+                            st.markdown(f"**Q{idx}:** {q['question']}")
+                            st.markdown(f"**Answer:** {q['answer']}")
+
+            # --- Prepare CSV for download ---
+            all_rows = []
+            for qtype, qlist in qa_pairs.items():
+                if qtype != "Matching":
+                    for q in qlist:
+                        row = {"Type": qtype, "Question": q['question'], "Answer": q['answer']}
+                        if qtype == "MCQ":
+                            row["Options"] = ", ".join(q['options'])
+                        all_rows.append(row)
+                else:
+                    for q in qlist:
+                        all_rows.append({"Type": "Matching", "Question": q['left'], "Answer": q['right'], "Options": ""})
+
+            df = pd.DataFrame(all_rows)
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label=UI_TEXT[lang_code]["download"],
+                data=csv,
+                file_name="generated_questions.csv",
+                mime="text/csv"
+            )
