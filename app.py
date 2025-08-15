@@ -109,10 +109,10 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
         if idx < max_wh:
             questions["WH"].append({"question": generate_wh_question(sent), "answer": sent})
         tf_question, tf_answer = generate_true_false(sent)
-        questions["TrueFalse"].append({"question": tf_question, "answer": tf_answer})
+        questions["True or False"].append({"question": tf_question, "answer": tf_answer})
         fb_question, fb_answer = generate_fill_blank(sent)
         if fb_question:
-            questions["FillBlank"].append({"question": fb_question, "answer": fb_answer})
+            questions["Fill in the Blank"].append({"question": fb_question, "answer": fb_answer})
         mcq_question, options, mcq_answer = generate_mcq(sent)
         if mcq_question:
             questions["MCQ"].append({"question": mcq_question, "options": options, "answer": mcq_answer})
