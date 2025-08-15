@@ -162,7 +162,7 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
 # --- Evaluation metrics for WH questions ---
 def compute_wh_metrics(paragraphs):
     metrics = {"English": {}, "Kannada": {}}
-    for lang, tokenizer, model in [("English", tokenizer_en, model_en), ("Kannada", tokenizer_kn, model_kn)]:
+    for lang, tokenizer, model in [("English", tokenizer_en, model_en, sample_paragraphs_en), ("Kannada", tokenizer_kn, model_kn, sample_paragraphs_kn)]:
         references, hypotheses = [], []
         for para in paragraphs:
             sentences = simple_sent_tokenize(para)
@@ -188,10 +188,15 @@ if view_metrics:
     st.markdown("Metrics are computed separately for English and Kannada models.")
     
     # Sample paragraphs for evaluation
-    sample_paragraphs = [
+    sample_paragraphs_en = [
         "Albert Einstein was a German-born theoretical physicist who developed the theory of relativity.",
         "The Nile is the longest river in Africa and has been essential to Egyptian civilization.",
         "Kannada is a Dravidian language spoken predominantly in the state of Karnataka, India."
+    ]
+    sample_paragraphs_kn = [
+        "ಅಲ್ಬರ್ಟ್ ಐನ್ಸ್ಟೈನ್ ಜರ್ಮನಿ ಜನಿಸಿದ ಸಿದ್ಧಾಂತ ಭೌತಶಾಸ್ತ್ರಜ್ಞರಾಗಿದ್ದರು, ಅವರು ಆಪೇಕ್ಷಾತ್ಮಕತೆಯ ಸಿದ್ಧಾಂತವನ್ನು ಅಭಿವೃದ್ಧಿಪಡಿಸಿದರು.",
+        "ನೀಲ್ ನದಿ ಆಫ್ರಿಕಾದ ಉದ್ದನೆಯ ನದಿಯಾಗಿದ್ದು, ಈಜಿಪ್ಟ್ ನಾಗರಿಕತೆಗೆ ಅಗತ್ಯವಾಯಿತು.",
+        "ಕನ್ನಡವು ಭಾರತದ ಕರ್ನಾಟಕ ರಾಜ್ಯದಲ್ಲಿ ಪ್ರಧಾನವಾಗಿ ಮಾತನಾಡುವ ದ್ರಾವಿಡ ಭಾಷೆಯಾಗಿದ್ದು."
     ]
     metrics = compute_wh_metrics(sample_paragraphs)
 
