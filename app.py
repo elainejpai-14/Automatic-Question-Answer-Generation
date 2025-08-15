@@ -170,7 +170,7 @@ def generate_all_types(context, max_qs=DEFAULT_MAX_Q):
     return out_df
 
 # ---------- Streamlit UI ----------
-st.title("QG & QA — multi-type generator")
+st.title("Automatic Q&A generator")
 st.markdown("Generate WH, Fill-Blank, MCQ, True/False, and Matching questions from a paragraph.")
 
 context_in = st.text_area("Context paragraph", height=150, placeholder="Paste a paragraph here...")
