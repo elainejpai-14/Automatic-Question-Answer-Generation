@@ -48,8 +48,8 @@ Once the app is running:<br>
 
 ## Models Used
 
-- **English-** ```valhalla/t5-small-qg-hl``` for WH-question generation.
-- **Kannada-** ```ai4bharat/MultiIndicQuestionGenerationSS``` for WH-question generation.
+- ```valhalla/t5-small-qg-hl``` for English.
+- ```ai4bharat/MultiIndicQuestionGenerationSS``` for Kannada.
 
 ---
 
