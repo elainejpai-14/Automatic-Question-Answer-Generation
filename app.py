@@ -8,33 +8,24 @@ import random
 import nltk
 import os
 
-# Ensure local nltk_data directory exists
-nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
-os.makedirs(nltk_data_path, exist_ok=True)
+# Add your NLTK data path (where punkt_tab is downloaded)
+nltk_data_path = r"C:\Users\Elaine M Paily\AppData\Roaming\nltk_data"
 nltk.data.path.append(nltk_data_path)
 
-# Download standard resources if missing
-for resource in ["punkt", "stopwords"]:
-    try:
-        nltk.data.find(f"tokenizers/{resource}" if resource=="punkt" else f"corpora/{resource}")
-    except LookupError:
-        nltk.download(resource, download_dir=nltk_data_path, quiet=True)
+# Ensure required resources are available
+try:
+    nltk.data.find('tokenizers/punkt_tab/english')
+except LookupError:
+    nltk.download('punkt_tab', download_dir=nltk_data_path)
 
-# --- Patch punkt_tab to redirect to punkt ---
-import nltk.data
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords', download_dir=nltk_data_path)
 
-_original_find = nltk.data.find
-
-def patched_find(resource_name):
-    if resource_name == "tokenizers/punkt_tab":
-        # Redirect to the standard punkt tokenizer
-        resource_name = "tokenizers/punkt"
-    return _original_find(resource_name)
-
-nltk.data.find = patched_find
-
-# Now safe to import sent_tokenize
 from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
+stop_words = set(stopwords.words('english'))
 
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
