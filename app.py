@@ -8,21 +8,21 @@ import random
 import nltk
 import os
 
-# Set temporary nltk path
-nltk_data_dir = "/tmp/nltk_data"
+# Set a proper NLTK data path
+nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
 if not os.path.exists(nltk_data_dir):
     os.makedirs(nltk_data_dir)
 
 nltk.data.path.append(nltk_data_dir)
 
-# Download required resources
-for pkg in ["punkt", "stopwords"]:
-    try:
-        nltk.data.find(f"tokenizers/{pkg}" if pkg=="punkt" else f"corpora/{pkg}")
-    except LookupError:
-        nltk.download(pkg, download_dir=nltk_data_dir)
+# Download punkt if not already present
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    nltk.download("punkt", download_dir=nltk_data_dir)
 
 from nltk.tokenize import sent_tokenize
+
 from nltk.corpus import stopwords
 stop_words = set(stopwords.words('english'))
 
