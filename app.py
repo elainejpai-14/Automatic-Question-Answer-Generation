@@ -185,8 +185,8 @@ def compute_wh_metrics(paragraphs):
 
 # --- Streamlit pages ---
 if view_metrics:
-    st.title("WH Question Generation Metrics (English Only)")
-    st.markdown("Metrics are computed for WH questions only, separately for English and Kannada models.")
+    st.title("Performance Metrics")
+    st.markdown("Metrics are computed separately for English and Kannada models.")
     
     # Sample paragraphs for evaluation
     sample_paragraphs = [
