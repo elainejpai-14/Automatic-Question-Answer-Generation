@@ -6,22 +6,23 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
 import nltk
-nltk.download('punkt')
 import os
+from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
 
+# Set a proper NLTK data path
 nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
-os.makedirs(nltk_data_dir, exist_ok=True)
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
+
 nltk.data.path.append(nltk_data_dir)
 
-# Download standard punkt tokenizer if not already present
+# Ensure 'punkt' is downloaded
 try:
     nltk.data.find("tokenizers/punkt")
 except LookupError:
     nltk.download("punkt", download_dir=nltk_data_dir)
 
-from nltk.tokenize import sent_tokenize
-
-from nltk.corpus import stopwords
 stop_words = set(stopwords.words('english'))
 
 # --- Load T5 model for WH question generation ---
