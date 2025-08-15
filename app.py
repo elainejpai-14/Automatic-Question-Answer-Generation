@@ -9,8 +9,8 @@ import re
 import pandas as pd
 from nltk.translate.bleu_score import corpus_bleu
 import sacrebleu
-import nltk
 from nltk.tokenize import word_tokenize
+import nltk
 from nltk import pos_tag
 
 # Ensure NLTK resources are downloaded
@@ -74,6 +74,13 @@ def load_models():
     return tokenizer_en, model_en, tokenizer_kn, model_kn
 
 tokenizer_en, model_en, tokenizer_kn, model_kn = load_models()
+
+def safe_word_tokenize(text, lang="en"):
+    if lang == "en":
+        return word_tokenize(text)
+    else:
+        # Basic split for non-English (Kannada)
+        return text.split()
 
 # --- Helper functions ---
 def generate_wh_question(sentence, lang_code):
@@ -183,8 +190,9 @@ def compute_wh_metrics(paragraphs, lang, tokenizer, model):
             inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
             outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
             question = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            hypotheses.append(word_tokenize(question))
-            references.append([word_tokenize(sent)])
+            hypotheses.append(safe_word_tokenize(question, lang))
+            references.append([safe_word_tokenize(sent, lang)])
+
     bleu = corpus_bleu(references, hypotheses)
     sacre = sacrebleu.corpus_bleu([" ".join(h) for h in hypotheses], [[" ".join(r[0]) for r in references]])
     return {"BLEU": round(bleu, 4), "SacreBLEU": round(sacre.score, 4)}
