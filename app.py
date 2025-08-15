@@ -13,7 +13,7 @@ nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
 os.makedirs(nltk_data_path, exist_ok=True)
 nltk.data.path.append(nltk_data_path)
 
-# Only download if not present
+# Download required NLTK resources if missing
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
@@ -23,7 +23,10 @@ try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
     nltk.download('stopwords', download_dir=nltk_data_path, quiet=True)
+
 from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
+stop_words = set(stopwords.words('english'))
 
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
@@ -37,7 +40,6 @@ tokenizer, model = load_model()
 
 # --- Helper functions ---
 def generate_wh_question(sentence):
-    # limit to first 5 sentences for performance
     input_text = "generate question: " + sentence
     inputs = tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
     outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
@@ -45,10 +47,11 @@ def generate_wh_question(sentence):
     return question
 
 def generate_true_false(sentence):
-    # improved negation patterns
-    negation_patterns = [(" is ", " is not "), (" are ", " are not "),
-                         (" has ", " has not "), (" have ", " have not "),
-                         (" was ", " was not "), (" were ", " were not ")]
+    negation_patterns = [
+        (" is ", " is not "), (" are ", " are not "),
+        (" has ", " has not "), (" have ", " have not "),
+        (" was ", " was not "), (" were ", " were not ")
+    ]
     if random.random() > 0.5:
         tf_answer = "False"
         for old, new in negation_patterns:
@@ -63,7 +66,7 @@ def generate_fill_blank(sentence):
     words = sentence.split()
     candidate_words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
     if not candidate_words:
-        return None, None  # skip this sentence
+        return None, None
     answer = random.choice(candidate_words)
     question = sentence.replace(answer, "_____", 1)
     return question, answer
@@ -72,12 +75,10 @@ def generate_mcq(sentence):
     words = list(set(sentence.split()))
     words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
     if not words:
-        return None, None, None  # skip this sentence
-
+        return None, None, None
     answer = random.choice(words)
     words.remove(answer)
     options = [answer]
-    # add up to 3 fake options from remaining words or dummy words
     dummy_options = ["OptionA", "OptionB", "OptionC", "OptionD"]
     fake_options = random.sample(words, k=min(3, len(words))) if len(words) >= 3 else dummy_options[:3]
     options.extend(fake_options)
@@ -110,19 +111,18 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
         tf_question, tf_answer = generate_true_false(sent)
         questions["TrueFalse"].append({"question": tf_question, "answer": tf_answer})
         fb_question, fb_answer = generate_fill_blank(sent)
-        if fb_question:  # skip if no candidate
+        if fb_question:
             questions["FillBlank"].append({"question": fb_question, "answer": fb_answer})
         mcq_question, options, mcq_answer = generate_mcq(sent)
-        if mcq_question:  # skip if failed
+        if mcq_question:
             questions["MCQ"].append({"question": mcq_question, "options": options, "answer": mcq_answer})
-    
+
     questions["Matching"] = generate_matching(sentences)
     return questions
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Offline Question Generator", layout="wide")
 st.title("Automatic Q&A Generator")
-
 st.markdown("Enter a paragraph below, and the app will generate multiple types of questions.")
 
 paragraph_input = st.text_area("Paste your paragraph here:", height=200)
@@ -134,14 +134,13 @@ if st.button("Generate Questions"):
         with st.spinner("Generating questions..."):
             qa_pairs = generate_questions_from_paragraph(paragraph_input)
 
-        # Display results with collapsible sections
         for qtype, qlist in qa_pairs.items():
             with st.expander(f"{qtype} Questions ({len(qlist)})", expanded=False):
                 for idx, q in enumerate(qlist, 1):
                     if qtype == "MCQ":
                         st.markdown(f"**Q{idx}:** {q['question']}")
                         for opt in q['options']:
-                            st.mark_markdown(f"- {opt}")
+                            st.markdown(f"- {opt}")
                         st.markdown(f"**Answer:** {q['answer']}")
                     elif qtype == "Matching":
                         st.markdown(f"**Pair {idx}:** Left -> {q['left']} | Right -> {q['right']}")
