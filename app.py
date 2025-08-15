@@ -7,7 +7,8 @@ import torch
 import random
 import re
 import pandas as pd
-from sklearn.metrics import bleu_score, sacrebleu
+from nltk.translate.bleu_score import corpus_bleu
+import sacrebleu
 
 # --- UI text dictionary ---
 UI_TEXT = {
