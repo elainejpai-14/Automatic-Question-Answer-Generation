@@ -9,6 +9,16 @@ import re
 import pandas as pd
 from nltk.translate.bleu_score import corpus_bleu
 import sacrebleu
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk import pos_tag
+
+# Ensure NLTK resources are downloaded
+nltk.download("punkt")
+nltk.download("averaged_perceptron_tagger")
+
+# --- Streamlit page config ---
+st.set_page_config(page_title="Automatic Q&A Generator", layout="wide")
 
 # --- UI text dictionary ---
 UI_TEXT = {
@@ -116,7 +126,8 @@ def generate_mcq(sentence):
         fake_options = random.sample(words, 3)
     else:
         fake_options = words.copy()
-        dummy_options = ["Apple", "River", "Book", "Tree"]
+        # Language-specific dummy options
+        dummy_options = ["Apple", "River", "Book", "Tree"] if lang_code == "en" else ["ಸೇಬು", "ನದಿ", "ಪುಸ್ತಕ", "ಮರ"]
         fake_options.extend(dummy_options[:3-len(fake_options)])
     options = [answer] + fake_options
     random.shuffle(options)
@@ -126,8 +137,9 @@ def generate_mcq(sentence):
 def generate_matching(sentences):
     left, right = [], []
     for sent in sentences:
-        words = [(w, "NN") for w in sent.split()]
-        nouns = [w for w, pos in words if pos.startswith("NN")]
+        words = word_tokenize(sent)
+        tagged = pos_tag(words)
+        nouns = [w for w, pos in tagged if pos.startswith("NN")]
         if nouns:
             left.append(sent)
             right.append(random.choice(nouns))
@@ -161,100 +173,74 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
     return questions
 
 # --- Evaluation metrics for WH questions ---
-def compute_wh_metrics(paragraphs):
-    metrics = {"English": {}, "Kannada": {}}
-    for lang, tokenizer, model in [("English", tokenizer_en, model_en, sample_paragraphs_en), ("Kannada", tokenizer_kn, model_kn, sample_paragraphs_kn)]:
-        references, hypotheses = [], []
-        for para in paragraphs:
-            sentences = simple_sent_tokenize(para)
-            for sent in sentences[:5]:
-                # Generate WH question
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                prompt = f"generate question: {sent}" if lang=="English" else f"question: {sent}"
-                inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
-                outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
-                question = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                hypotheses.append(question)
-                references.append([sent])  
-        # Compute BLEU and SacreBLEU
-        bleu = corpus_bleu([[ref] for ref in references], hypotheses)
-        sacre = sacrebleu.corpus_bleu(hypotheses, [[ref] for ref in references])
-        metrics[lang]["BLEU"] = round(bleu, 4)
-        metrics[lang]["SacreBLEU"] = round(sacre.score, 4)
-    return metrics
+def compute_wh_metrics(paragraphs, lang, tokenizer, model):
+    references, hypotheses = [], []
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    for para in paragraphs:
+        sentences = simple_sent_tokenize(para)
+        for sent in sentences[:5]:
+            prompt = f"generate question: {sent}" if lang=="English" else f"question: {sent}"
+            inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
+            outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
+            question = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            hypotheses.append(word_tokenize(question))
+            references.append([word_tokenize(sent)])
+    bleu = corpus_bleu(references, hypotheses)
+    sacre = sacrebleu.corpus_bleu([" ".join(h) for h in hypotheses], [[" ".join(r[0]) for r in references]])
+    return {"BLEU": round(bleu, 4), "SacreBLEU": round(sacre.score, 4)}
+
+# --- Sample paragraphs for evaluation ---
+sample_paragraphs_en = [
+    "Albert Einstein was a German-born theoretical physicist who developed the theory of relativity.",
+    "The Nile is the longest river in Africa and has been essential to Egyptian civilization.",
+    "Kannada is a Dravidian language spoken predominantly in the state of Karnataka, India."
+]
+sample_paragraphs_kn = [
+    "ಅಲ್ಬರ್ಟ್ ಐನ್ಸ್ಟೈನ್ ಜರ್ಮನಿ ಜನಿಸಿದ ಸಿದ್ಧಾಂತ ಭೌತಶಾಸ್ತ್ರಜ್ಞರಾಗಿದ್ದರು, ಅವರು ಆಪೇಕ್ಷಾತ್ಮಕತೆಯ ಸಿದ್ಧಾಂತವನ್ನು ಅಭಿವೃದ್ಧಿಪಡಿಸಿದರು.",
+    "ನೀಲ್ ನದಿ ಆಫ್ರಿಕಾದ ಉದ್ದನೆಯ ನದಿಯಾಗಿದ್ದು, ಈಜಿಪ್ಟ್ ನಾಗರಿಕತೆಗೆ ಅಗತ್ಯವಾಯಿತು.",
+    "ಕನ್ನಡವು ಭಾರತದ ಕರ್ನಾಟಕ ರಾಜ್ಯದಲ್ಲಿ ಪ್ರಧಾನವಾಗಿ ಮಾತನಾಡುವ ದ್ರಾವಿಡ ಭಾಷೆಯಾಗಿದ್ದು."
+]
 
 # --- Streamlit pages ---
 if view_metrics:
     st.title("Performance Metrics")
     st.markdown("Metrics are computed separately for English and Kannada models.")
-    
-    # Sample paragraphs for evaluation
-    sample_paragraphs_en = [
-        "Albert Einstein was a German-born theoretical physicist who developed the theory of relativity.",
-        "The Nile is the longest river in Africa and has been essential to Egyptian civilization.",
-        "Kannada is a Dravidian language spoken predominantly in the state of Karnataka, India."
-    ]
-    sample_paragraphs_kn = [
-        "ಅಲ್ಬರ್ಟ್ ಐನ್ಸ್ಟೈನ್ ಜರ್ಮನಿ ಜನಿಸಿದ ಸಿದ್ಧಾಂತ ಭೌತಶಾಸ್ತ್ರಜ್ಞರಾಗಿದ್ದರು, ಅವರು ಆಪೇಕ್ಷಾತ್ಮಕತೆಯ ಸಿದ್ಧಾಂತವನ್ನು ಅಭಿವೃದ್ಧಿಪಡಿಸಿದರು.",
-        "ನೀಲ್ ನದಿ ಆಫ್ರಿಕಾದ ಉದ್ದನೆಯ ನದಿಯಾಗಿದ್ದು, ಈಜಿಪ್ಟ್ ನಾಗರಿಕತೆಗೆ ಅಗತ್ಯವಾಯಿತು.",
-        "ಕನ್ನಡವು ಭಾರತದ ಕರ್ನಾಟಕ ರಾಜ್ಯದಲ್ಲಿ ಪ್ರಧಾನವಾಗಿ ಮಾತನಾಡುವ ದ್ರಾವಿಡ ಭಾಷೆಯಾಗಿದ್ದು."
-    ]
-    metrics = compute_wh_metrics(sample_paragraphs)
 
-    st.subheader("English WH Question Metrics")
-    st.markdown(f"- BLEU Score: {metrics['English']['BLEU']}")
-    st.markdown(f"- SacreBLEU Score: {metrics['English']['SacreBLEU']}")
+    metrics_en = compute_wh_metrics(sample_paragraphs_en, "English", tokenizer_en, model_en)
+    metrics_kn = compute_wh_metrics(sample_paragraphs_kn, "Kannada", tokenizer_kn, model_kn)
 
-    st.subheader("Kannada WH Question Metrics")
-    st.markdown(f"- BLEU Score: {metrics['Kannada']['BLEU']}")
-    st.markdown(f"- SacreBLEU Score: {metrics['Kannada']['SacreBLEU']}")
+    st.subheader("Metrics for English")
+    st.write(metrics_en)
+    st.subheader("Metrics for Kannada")
+    st.write(metrics_kn)
+
 else:
-    # Main Q&A Generation Page
-    st.set_page_config(page_title=UI_TEXT[lang_code]["title"], layout="wide")
     st.title(UI_TEXT[lang_code]["title"])
-    st.markdown(UI_TEXT[lang_code]["desc"])
-
-    paragraph_input = st.text_area(UI_TEXT[lang_code]["input"], height=200)
-
+    st.write(UI_TEXT[lang_code]["desc"])
+    paragraph = st.text_area(UI_TEXT[lang_code]["input"], height=200)
     if st.button(UI_TEXT[lang_code]["generate_btn"]):
-        if paragraph_input.strip() == "":
+        if not paragraph.strip():
             st.warning(UI_TEXT[lang_code]["warning"])
         else:
-            with st.spinner("Generating questions..."):
-                qa_pairs = generate_questions_from_paragraph(paragraph_input)
-
-            for qtype, qlist in qa_pairs.items():
-                with st.expander(f"{qtype} Questions ({len(qlist)})", expanded=False):
-                    for idx, q in enumerate(qlist, 1):
-                        if qtype == "MCQ":
-                            st.markdown(f"**Q{idx}:** {q['question']}")
-                            for opt in q['options']:
-                                st.markdown(f"- {opt}")
-                            st.markdown(f"**Answer:** {q['answer']}")
-                        elif qtype == "Matching":
-                            st.markdown(f"**Pair {idx}:** Left -> {q['left']} | Right -> {q['right']}")
-                        else:
-                            st.markdown(f"**Q{idx}:** {q['question']}")
-                            st.markdown(f"**Answer:** {q['answer']}")
-
-            # --- Prepare CSV for download ---
-            all_rows = []
-            for qtype, qlist in qa_pairs.items():
-                if qtype != "Matching":
-                    for q in qlist:
-                        row = {"Type": qtype, "Question": q['question'], "Answer": q['answer']}
-                        if qtype == "MCQ":
-                            row["Options"] = ", ".join(q['options'])
-                        all_rows.append(row)
-                else:
-                    for q in qlist:
-                        all_rows.append({"Type": "Matching", "Question": q['left'], "Answer": q['right'], "Options": ""})
-
-            df = pd.DataFrame(all_rows)
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label=UI_TEXT[lang_code]["download"],
-                data=csv,
-                file_name="generated_questions.csv",
-                mime="text/csv"
-            )
+            q_data = generate_questions_from_paragraph(paragraph)
+            st.subheader("Generated Questions")
+            for qtype, qlist in q_data.items():
+                st.markdown(f"### {qtype}")
+                for idx, q in enumerate(qlist):
+                    if qtype=="MCQ":
+                        st.write(f"{idx+1}. {q['question']}")
+                        st.write(f"Options: {q['options']}")
+                        st.write(f"Answer: {q['answer']}")
+                    elif qtype=="Matching":
+                        st.write(f"{idx+1}. {q}")
+                    else:
+                        st.write(f"{idx+1}. {q['question']} → {q['answer']}")
+            # CSV download
+            rows = []
+            for qtype, qlist in q_data.items():
+                for q in qlist:
+                    row = {"Type": qtype}
+                    row.update(q)
+                    rows.append(row)
+            df = pd.DataFrame(rows)
+            st.download_button(UI_TEXT[lang_code]["download"], df.to_csv(index=False), file_name="questions.csv")
