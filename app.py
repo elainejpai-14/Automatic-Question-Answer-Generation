@@ -23,6 +23,10 @@ try:
 except LookupError:
     nltk.download("punkt", download_dir=nltk_data_dir)
 
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords', download_dir=nltk_data_dir)
 stop_words = set(stopwords.words('english'))
 
 # --- Load T5 model for WH question generation ---
