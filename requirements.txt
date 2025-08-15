@@ -1,9 +1,5 @@
 streamlit
 torch
 transformers
-spacy
-pydantic
-typer
-rapidfuzz
-pandas
 sentencepiece
+nltk
