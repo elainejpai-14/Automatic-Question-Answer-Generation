@@ -21,6 +21,10 @@ except LookupError:
     
 from nltk.tokenize import sent_tokenize
 
+from nltk.corpus import stopwords
+nltk.download('stopwords', download_dir=nltk_data_path)
+stop_words = set(stopwords.words('english'))
+
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
 def load_model():
@@ -52,12 +56,15 @@ def generate_true_false(sentence):
 
 def generate_fill_blank(sentence):
     words = sentence.split()
-    if len(words) < 4:
+    # filter out stopwords and very short words
+    candidate_words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
+    
+    if not candidate_words:
+        # fallback if no good candidate
         return sentence, ""
-    blank_idx = random.randint(0, len(words)-1)
-    answer = words[blank_idx]
-    words[blank_idx] = "_____"
-    question = " ".join(words)
+    
+    answer = random.choice(candidate_words)
+    question = sentence.replace(answer, "_____", 1)
     return question, answer
 
 def generate_mcq(sentence):
