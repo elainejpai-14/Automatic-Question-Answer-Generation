@@ -10,25 +10,32 @@ import os
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 
-# Set a proper NLTK data path
 nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
 if not os.path.exists(nltk_data_dir):
     os.makedirs(nltk_data_dir)
 
 nltk.data.path.append(nltk_data_dir)
 
-# Ensure 'punkt' is downloaded
+# Ensure punkt is downloaded
 try:
     nltk.data.find("tokenizers/punkt")
 except LookupError:
     nltk.download("punkt", download_dir=nltk_data_dir)
 
+# Ensure stopwords are downloaded
 try:
-    nltk.data.find('corpora/stopwords')
+    stop_words = set(stopwords.words("english"))
 except LookupError:
-    nltk.download('stopwords', download_dir=nltk_data_dir)
-stop_words = set(stopwords.words('english'))
-
+    try:
+        nltk.download("stopwords", download_dir=nltk_data_dir)
+        stop_words = set(stopwords.words("english"))
+    except:
+        # fallback: use a minimal built-in stopwords list
+        stop_words = set([
+            "a", "an", "the", "and", "or", "but", "if", "while", "with", "is",
+            "are", "was", "were", "has", "have", "had", "of", "in", "on", "for"
+        ])
+        
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
 def load_model():
