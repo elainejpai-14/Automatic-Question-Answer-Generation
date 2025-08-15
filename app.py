@@ -103,7 +103,7 @@ def simple_sent_tokenize(text):
 
 def generate_questions_from_paragraph(paragraph, max_wh=5):
     sentences = simple_sent_tokenize(paragraph)
-    questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
+    questions = {"WH": [], "True or False": [], "Fill in the Blank": [], "MCQ": [], "Matching": []}
 
     for idx, sent in enumerate(sentences):
         if idx < max_wh:
@@ -164,7 +164,7 @@ if st.button("Generate Questions"):
         df = pd.DataFrame(all_rows)
         csv = df.to_csv(index=False)
         st.download_button(
-            label="Download Questions as CSV",
+            label="Download as CSV",
             data=csv,
             file_name="generated_questions.csv",
             mime="text/csv"
