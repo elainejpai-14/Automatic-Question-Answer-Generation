@@ -174,8 +174,7 @@ def compute_wh_metrics(paragraphs):
                 outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
                 question = tokenizer.decode(outputs[0], skip_special_tokens=True)
                 hypotheses.append(question)
-                references.append([sent])  # Reference is original sentence
-
+                references.append([sent])  
         # Compute BLEU and SacreBLEU
         bleu = bleu_score.corpus_bleu([[ref] for ref in references], hypotheses)
         sacre = sacrebleu.corpus_bleu(hypotheses, [references])
