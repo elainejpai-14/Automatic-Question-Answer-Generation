@@ -177,8 +177,8 @@ def compute_wh_metrics(paragraphs):
                 hypotheses.append(question)
                 references.append([sent])  
         # Compute BLEU and SacreBLEU
-        bleu = bleu_score.corpus_bleu([[ref] for ref in references], hypotheses)
-        sacre = sacrebleu.corpus_bleu(hypotheses, [references])
+        bleu = corpus_bleu([[ref] for ref in references], hypotheses)
+        sacre = sacrebleu.corpus_bleu(hypotheses, [[ref] for ref in references])
         metrics[lang]["BLEU"] = round(bleu, 4)
         metrics[lang]["SacreBLEU"] = round(sacre.score, 4)
     return metrics
