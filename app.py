@@ -8,25 +8,25 @@ import random
 import nltk
 import os
 
-# --- offline-safe NLTK setup ---
+# Ensure a local nltk_data directory exists
 nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
 os.makedirs(nltk_data_path, exist_ok=True)
 nltk.data.path.append(nltk_data_path)
 
-# Download required NLTK resources if missing
+# Download the standard punkt and stopwords
 try:
-    nltk.data.find('tokenizers/punkt')
+    nltk.data.find("tokenizers/punkt")
 except LookupError:
-    nltk.download('punkt', download_dir=nltk_data_path, quiet=True)
+    nltk.download("punkt", download_dir=nltk_data_path, quiet=True)
 
 try:
-    nltk.data.find('corpora/stopwords')
+    nltk.data.find("corpora/stopwords")
 except LookupError:
-    nltk.download('stopwords', download_dir=nltk_data_path, quiet=True)
+    nltk.download("stopwords", download_dir=nltk_data_path, quiet=True)
 
+# Patch: punkt_tab does not exist; redirect to punkt
 from nltk.tokenize import sent_tokenize
-from nltk.corpus import stopwords
-stop_words = set(stopwords.words('english'))
+nltk.data.path.append(nltk_data_path)
 
 # --- Load T5 model for WH question generation ---
 @st.cache_resource(show_spinner=True)
