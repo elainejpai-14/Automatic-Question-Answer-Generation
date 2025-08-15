@@ -6,7 +6,19 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import random
 import nltk
-nltk.download('punkt')
+import os
+
+# --- Ensure punkt is downloaded in a folder Streamlit can access ---
+nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
+if not os.path.exists(nltk_data_path):
+    os.makedirs(nltk_data_path)
+
+nltk.data.path.append(nltk_data_path)
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', download_dir=nltk_data_path)
+    
 from nltk.tokenize import sent_tokenize
 
 # --- Load T5 model for WH question generation ---
@@ -49,16 +61,20 @@ def generate_fill_blank(sentence):
     return question, answer
 
 def generate_mcq(sentence):
-    words = sentence.split()
+    words = list(set(sentence.split()))  # use unique words only
     if len(words) < 4:
-        return sentence, ["A", "B", "C", "D"], "A"
+        # fallback if not enough unique words
+        return sentence, ["A", "B", "C", "D"], words[0] if words else "A"
+    
     answer = random.choice(words)
+    words.remove(answer)  # remove the answer from the pool
     options = [answer]
-    while len(options) < 4:
-        fake_option = random.choice(words)
-        if fake_option not in options:
-            options.append(fake_option)
+    
+    # select 3 more unique fake options
+    fake_options = random.sample(words, k=min(3, len(words)))
+    options.extend(fake_options)
     random.shuffle(options)
+    
     question = sentence.replace(answer, "_____", 1)
     return question, options, answer
 
@@ -80,7 +96,7 @@ def generate_matching(sentences):
     return pairs
 
 def generate_questions_from_paragraph(paragraph):
-    sentences = sent_tokenize(paragraph)
+    sentences = sent_tokenize(paragraph, language='english')
     questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
 
     for sent in sentences:
