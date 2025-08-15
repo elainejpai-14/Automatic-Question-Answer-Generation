@@ -1,5 +1,5 @@
 # Automatic-Question-Answer-Generation
-This is a Streamlit-based web application that automatically generates multiple types of questions from a given paragraph in **English** or **Kannada**. It supports WH questions, True/False, Fill-in-the-Blank, MCQs, and Matching questions, along with evaluation metrics for WH questions.
+This is a Streamlit-based web application that automatically generates multiple types of questions from a given paragraph in **English** or **Kannada**. It supports WH questions, True/False, Fill-in-the-Blank, MCQs, and Matching questions, along with evaluation metrics.
 
 ---
 
@@ -12,7 +12,7 @@ This is a Streamlit-based web application that automatically generates multiple 
   - Fill-in-the-Blank
   - Multiple Choice Questions (MCQ)
   - Matching questions
-- **Evaluation Metrics**: BLEU and SacreBLEU scores for WH question generation.
+- **Evaluation Metrics**: BLEU and SacreBLEU scores.
 - **Download Questions**: Export generated questions as a CSV file.
 
 ---
