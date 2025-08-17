@@ -202,6 +202,7 @@ def generate_questions_from_paragraph(paragraph, max_wh=5):
 
 # --- Evaluation metrics for WH questions ---
 def compute_wh_metrics(paragraphs, lang, tokenizer, model):
+    lang_short = "en" if lang == "English" else "kn"
     references, hypotheses = [], []
     device = "cuda" if torch.cuda.is_available() else "cpu"
     for para in paragraphs:
@@ -211,8 +212,8 @@ def compute_wh_metrics(paragraphs, lang, tokenizer, model):
             inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
             outputs = model.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
             question = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            hypotheses.append(safe_word_tokenize(question, lang))
-            references.append([safe_word_tokenize(sent, lang)])
+            hypotheses.append(safe_word_tokenize(question, lang_short))
+            references.append([safe_word_tokenize(sent, lang_short)])
 
     bleu = corpus_bleu(references, hypotheses)
     sacre = sacrebleu.corpus_bleu([" ".join(h) for h in hypotheses], [[" ".join(r[0]) for r in references]])
