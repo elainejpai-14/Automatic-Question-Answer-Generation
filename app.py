@@ -2,7 +2,7 @@
 # Streamlit bilingual question generator (English/Kannada) with WH metrics
 
 import streamlit as st
-from transformers import T5ForConditionalGeneration, T5Tokenizer, AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 import random
 import re
@@ -63,13 +63,18 @@ stop_words = STOP_WORDS_EN if lang_code == "en" else STOP_WORDS_KN
 # --- Load models ---
 @st.cache_resource(show_spinner=True)
 def load_models():
-    # English WH QG model
-    tokenizer_en = T5Tokenizer.from_pretrained("valhalla/t5-small-qg-hl")
-    model_en = T5ForConditionalGeneration.from_pretrained("valhalla/t5-small-qg-hl").to("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Kannada WH QG model
-    tokenizer_kn = AutoTokenizer.from_pretrained("ai4bharat/MultiIndicQuestionGenerationSS", do_lower_case=False, use_fast=False, keep_accents=True)
-    model_kn = AutoModelForSeq2SeqLM.from_pretrained("ai4bharat/MultiIndicQuestionGenerationSS").to("cuda" if torch.cuda.is_available() else "cpu")
+    # English QG (T5-based) via Auto*
+    tokenizer_en = AutoTokenizer.from_pretrained("valhalla/t5-small-qg-hl")
+    model_en = AutoModelForSeq2SeqLM.from_pretrained("valhalla/t5-small-qg-hl").to(device)
+
+    # Kannada QG (ai4bharat) via Auto*
+    tokenizer_kn = AutoTokenizer.from_pretrained(
+        "ai4bharat/MultiIndicQuestionGenerationSS",
+        do_lower_case=False, use_fast=False, keep_accents=True
+    )
+    model_kn = AutoModelForSeq2SeqLM.from_pretrained("ai4bharat/MultiIndicQuestionGenerationSS").to(device)
 
     return tokenizer_en, model_en, tokenizer_kn, model_kn
 
