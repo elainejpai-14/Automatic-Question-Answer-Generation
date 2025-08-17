@@ -161,10 +161,13 @@ def generate_mcq(sentence):
 def generate_matching(sentences):
     left, right = [], []
     for sent in sentences:
-        words = word_tokenize(sent)
-        # Explicitly use English tagger to match the downloaded *_eng model
-        tagged = pos_tag(words, lang='eng')
-        nouns = [w for w, pos in tagged if pos.startswith("NN")]
+        tokens = safe_word_tokenize(sent, "en" if lang_code=="en" else "kn")
+        if lang_code == "en":
+            tagged = pos_tag(tokens, lang="eng")
+            nouns = [w for w, pos in tagged if pos.startswith("NN")]
+        else:
+            # simple KN heuristic: pick longer tokens as “nouns”
+            nouns = [t for t in tokens if len(t) >= 4]
         if nouns:
             left.append(sent)
             right.append(random.choice(nouns))
