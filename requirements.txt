@@ -1,13 +1,12 @@
-# requirements.txt
 pip>=24.2
 setuptools>=68
 wheel
 
-streamlit>=1.32
-pandas
-nltk
+streamlit==1.36.0
+pandas==2.2.2
+nltk==3.8.1
 sentencepiece
-sacrebleu>=2.4
+sacrebleu==2.4.3
 huggingface-hub>=0.23
 
 --extra-index-url https://download.pytorch.org/whl/cpu
