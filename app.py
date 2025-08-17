@@ -105,18 +105,73 @@ def simple_sent_tokenize(text):
     sentences = re.split(r'(?<=[.!?]) +', text.strip())
     return [s for s in sentences if s]
 
+WH_TYPES = ["who", "what", "when", "where", "why", "which", "how"]
+
+def guess_wh_type(sent: str) -> str:
+    s = " " + sent.strip() + " "
+    # time
+    if re.search(r"\b(BC|BCE|AD|CE|century|year|years|month|months|week|weeks|day|days|season|era|age|aged|born|died|around \d{3,4}|\b\d{3,4}\b)\b", s, re.I):
+        return "when"
+    # place
+    if re.search(r"\b(city|cities|river|mountain|valley|country|state|region|located|in|at|from|to)\b", s, re.I):
+        return "where"
+    # reason
+    if re.search(r"\b(because|due to|therefore|so that|reason|purpose|cause)\b", s, re.I):
+        return "why"
+    # people (very rough; two consecutive caps words)
+    if re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", sent):
+        return "who"
+    # quantity
+    if re.search(r"\b(\d+|many|much|several|few|number of|amount)\b", s, re.I):
+        return "how"
+    # choice
+    if re.search(r"\btypes? of|kinds? of|one of\b", s, re.I):
+        return "which"
+    return "what"
+
 def generate_wh_question(sentence, lang_code):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if lang_code == "en":
-        prompt = f"generate question: {sentence}"
+        wh = guess_wh_type(sentence)
+        # steer: ask for a specific WH starter
+        prompt = f"generate a {wh} question about: {sentence}"
         inputs = tokenizer_en.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
-        outputs = model_en.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
+        # add a touch of sampling so it won’t collapse to “What…”
+        outputs = model_en.generate(
+            inputs,
+            max_length=64,
+            num_beams=4,
+            do_sample=True,           # enable sampling
+            top_p=0.92,               # nucleus sampling
+            temperature=0.9,          # mild creativity
+            early_stopping=True
+        )
         question = tokenizer_en.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
-    else:
-        prompt = f"question: {sentence}"
-        inputs = tokenizer_kn.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
-        outputs = model_kn.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
-        question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+        # If model ignored steering, lightly post-fix opening token
+        if not question.lower().startswith(tuple(WH_TYPES)):
+            question = question[0].upper() + question[1:]  # basic cleanup
+            opener = wh.capitalize()
+            if not question.endswith("?"):
+                question += "?"
+            if not question.lower().startswith(wh):
+                question = f"{opener} {question[0].lower() + question[1:]}"
+        return question
+
+    # Kannada model: it responds well to generic “question:” but has limited controllability.
+    # We keep it as-is; post-process only if needed.
+    prompt = f"question: {sentence}"
+    inputs = tokenizer_kn.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
+    outputs = model_kn.generate(
+        inputs,
+        max_length=64,
+        num_beams=4,
+        do_sample=True,
+        top_p=0.92,
+        temperature=0.9,
+        early_stopping=True
+    )
+    question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True)
     return question
 
 def generate_true_false(sentence):
