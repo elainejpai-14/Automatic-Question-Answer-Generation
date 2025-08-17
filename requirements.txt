@@ -4,7 +4,7 @@ wheel
 
 streamlit==1.36.0
 pandas==2.2.2
-nltk==3.8.1
+nltk>=3.9
 sentencepiece
 sacrebleu==2.4.3
 huggingface-hub>=0.23
