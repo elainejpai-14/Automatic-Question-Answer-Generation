@@ -17,14 +17,16 @@ from transformers.models.auto import AutoTokenizer
 from nltk.translate.bleu_score import corpus_bleu
 import sacrebleu
 from nltk.tokenize import word_tokenize
+import os
 import nltk
 from nltk import pos_tag
 
 # ---------- NLTK setup ----------
 def _ensure_nltk_data():
+    dl_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
+    os.makedirs(dl_dir, exist_ok=True)
     needed = [
         ("tokenizers/punkt", "punkt"),
-        ("tokenizers/punkt_tab/english", "punkt_tab"),
         ("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger"),
         ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
     ]
@@ -32,7 +34,8 @@ def _ensure_nltk_data():
         try:
             nltk.data.find(path)
         except LookupError:
-            nltk.download(pkg, quiet=True)
+            nltk.download(pkg, download_dir=dl_dir, quiet=True)
+
 _ensure_nltk_data()
 
 # ---------- UI text ----------
@@ -108,12 +111,12 @@ def generate_wh_question(sentence, lang_code):
         prompt = f"generate question: {sentence}"
         inputs = tokenizer_en.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
         outputs = model_en.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
-        question = tokenizer_en.decode(outputs[0], skip_special_tokens=True)
+        question = tokenizer_en.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
     else:
         prompt = f"question: {sentence}"
         inputs = tokenizer_kn.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
         outputs = model_kn.generate(inputs, max_length=64, num_beams=4, early_stopping=True)
-        question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True)
+        question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
     return question
 
 def generate_true_false(sentence):
