@@ -14,8 +14,20 @@ import nltk
 from nltk import pos_tag
 
 # Ensure NLTK resources are downloaded
-nltk.download("punkt")
-nltk.download("averaged_perceptron_tagger")
+def _ensure_nltk_data():
+    needed = [
+        ("tokenizers/punkt", "punkt"),
+        ("tokenizers/punkt_tab/english", "punkt_tab"),
+        ("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger"),
+        ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
+    ]
+    for path, pkg in needed:
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            nltk.download(pkg)
+            
+_ensure_nltk_data()
 
 # --- Streamlit page config ---
 st.set_page_config(page_title="Automatic Q&A Generator", layout="wide")
@@ -150,7 +162,8 @@ def generate_matching(sentences):
     left, right = [], []
     for sent in sentences:
         words = word_tokenize(sent)
-        tagged = pos_tag(words)
+        # Explicitly use English tagger to match the downloaded *_eng model
+        tagged = pos_tag(words, lang='eng')
         nouns = [w for w, pos in tagged if pos.startswith("NN")]
         if nouns:
             left.append(sent)
