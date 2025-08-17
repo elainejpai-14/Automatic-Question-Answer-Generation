@@ -5,7 +5,7 @@ sentencepiece
 sacrebleu>=2.4
 
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.3.1
+torch==2.5.1
 
 transformers==4.44.2
 accelerate>=0.33
