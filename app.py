@@ -16,7 +16,7 @@ from transformers.models.auto import AutoTokenizer
 # Metrics + tokenization helpers
 from nltk.translate.bleu_score import corpus_bleu
 import sacrebleu
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize
 import os
 import nltk
 from nltk import pos_tag
@@ -27,7 +27,7 @@ def _ensure_nltk_data():
     os.makedirs(dl_dir, exist_ok=True)
     needed = [
         ("tokenizers/punkt", "punkt"),
-         ("tokenizers/punkt_tab/english", "punkt_tab"),
+        ("tokenizers/punkt_tab/english", "punkt_tab"),
         ("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger"),
         ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
     ]
@@ -39,12 +39,41 @@ def _ensure_nltk_data():
 
 _ensure_nltk_data()
 
+# ---------- UI: Colors (hover -> blue) ----------
+st.markdown("""
+<style>
+/* Make all buttons hover blue */
+button[kind="primary"]:hover, button:hover {
+  background-color: #1e88e5 !important;
+  border-color: #1565c0 !important;
+  color: white !important;
+}
+/* Download button hover */
+.stDownloadButton > button:hover {
+  background-color: #1e88e5 !important;
+  border-color: #1565c0 !important;
+}
+/* Expander title hover */
+details:hover > summary, details > summary:hover {
+  color: #1e88e5 !important;
+}
+/* Links hover */
+a:hover { color: #1e88e5 !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ---------- UI text ----------
 UI_TEXT = {
     "en": {
         "title": "Automatic Q&A Generator",
         "desc": "Enter a paragraph below, and the app will generate multiple types of questions.",
         "input": "Paste your paragraph here:",
+        "sliders_title": "How many questions per type?",
+        "wh": "WH questions",
+        "tf": "True/False",
+        "fb": "Fill in the Blank",
+        "mcq": "MCQ",
+        "match": "Matching pairs",
         "generate_btn": "Generate Questions",
         "warning": "Please enter a paragraph!",
         "download": "Download as CSV"
@@ -53,6 +82,12 @@ UI_TEXT = {
         "title": "ಸ್ವಯಂಚಾಲಿತ ಪ್ರಶ್ನೆ-ಉತ್ತರ ತಯಾರಕ",
         "desc": "ಕೆಳಗಿನ ಪ್ಯಾರಾಗ್ರಾಫ್ ಅನ್ನು ನಮೂದಿಸಿ, ಅಪ್ಲಿಕೇಶನ್ ವಿವಿಧ ರೀತಿಯ ಪ್ರಶ್ನೆಗಳನ್ನು ತಯಾರಿಸುತ್ತದೆ.",
         "input": "ನಿಮ್ಮ ಪ್ಯಾರಾಗ್ರಾಫ್ ಅನ್ನು ಇಲ್ಲಿ ಹಾಕಿ:",
+        "sliders_title": "ಪ್ರಕಾರಪ್ರತಿ ಎಷ್ಟು ಪ್ರಶ್ನೆಗಳು?",
+        "wh": "WH ಪ್ರಶ್ನೆಗಳು",
+        "tf": "ಸತ್ಯ/ಅಸತ್ಯ",
+        "fb": "ಖಾಲಿ ಜಾಗ ತುಂಬಿಸಿ",
+        "mcq": "ಬಹು ಆಯ್ಕೆ (MCQ)",
+        "match": "ಹೊಂದಾಣಿಕೆ ಜೋಡಿಗಳು",
         "generate_btn": "ಪ್ರಶ್ನೆಗಳನ್ನು ತಯಾರಿಸಿ",
         "warning": "ದಯವಿಟ್ಟು ಪ್ಯಾರಾಗ್ರಾಫ್ ನಮೂದಿಸಿ!",
         "download": "CSV ಆಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ"
@@ -103,155 +138,407 @@ def safe_word_tokenize(text, lang="en"):
     return word_tokenize(text) if lang == "en" else text.split()
 
 def simple_sent_tokenize(text):
-    sentences = re.split(r'(?<=[.!?]) +', text.strip())
-    return [s for s in sentences if s]
+    text = re.sub(r"\s+", " ", text.strip())
+    try:
+        return [s for s in sent_tokenize(text) if s.strip()]
+    except Exception:
+        # fallback
+        return [s for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
 
-WH_TYPES = ["who", "what", "when", "where", "why", "which", "how"]
+# ===== English WH selection & prefix building =====
 
-def guess_wh_type(sent: str) -> str:
-    s = " " + sent.strip() + " "
-    # time
-    if re.search(r"\b(BC|BCE|AD|CE|century|year|years|month|months|week|weeks|day|days|season|era|age|aged|born|died|around \d{3,4}|\b\d{3,4}\b)\b", s, re.I):
-        return "when"
-    # place
-    if re.search(r"\b(city|cities|river|mountain|valley|country|state|region|located|in|at|from|to)\b", s, re.I):
-        return "where"
-    # reason
-    if re.search(r"\b(because|due to|therefore|so that|reason|purpose|cause)\b", s, re.I):
-        return "why"
-    # people (very rough; two consecutive caps words)
-    if re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", sent):
-        return "who"
-    # quantity
-    if re.search(r"\b(\d+|many|much|several|few|number of|amount)\b", s, re.I):
-        return "how"
-    # choice
-    if re.search(r"\btypes? of|kinds? of|one of\b", s, re.I):
-        return "which"
-    return "what"
+# Domain heads that prefer WHICH + <noun>
+_DOMAIN_LEX = {
+    "planet":  r"\b(planet|Mercury|Venus|Earth|Mars|Jupiter|Saturn|Uranus|Neptune)\b",
+    "city":    r"\b(city|cities|Harappa|Mohenjo-?Daro|Babylon|Ur|London|Paris|Delhi|Bengaluru)\b",
+    "river":   r"\b(river|Nile|Indus|Amazon|Ganga|Ganges|Cauvery|Kaveri)\b",
+    "language":r"\b(language|dialect|Kannada|English|Hindi|Tamil|Telugu)\b",
+    "country": r"\b(country|nation|state|India|Pakistan|Brazil|USA|United States|China)\b",
+}
+
+_TIME_HINT = r"\b(BC|BCE|AD|CE|century|year|years|month|months|week|weeks|day|days|season|era|age|aged|born|died|around \d{3,4}|\b\d{3,4}\b)\b"
+_REASON_HINT = r"\b(because|due to|therefore|so that|reason|purpose|cause|caused)\b"
+_PLACE_HINT = r"\b(located|location|region|valley|continent|ocean|country|state|city|capital|river|mountain|coast)\b"
+_SUPERLATIVE_HINT = r"\b(closest|nearest|farthest|largest|smallest|biggest|only|main|primary|principal|first|most|least|highest|lowest)\b"
+_QUANT_HINT = r"\b(\d+|many|much|several|few|number of|amount|percent|percentage|population)\b"
+
+def _detect_domain(sent: str) -> str | None:
+    for name, pat in _DOMAIN_LEX.items():
+        if re.search(pat, sent, re.I):
+            return name
+    return None
+
+def _extract_head_noun(tokens_with_pos):
+    """Return a plausible head noun (NN*) if any, else None."""
+    for tag_pref in ("NNP", "NNPS", "NN", "NNS"):
+        for w, t in tokens_with_pos:
+            if t == tag_pref and re.sub(r"\W+", "", w):
+                return w
+    return None
+
+def choose_wh_and_prefix(sentence: str):
+    s = " " + sentence.strip() + " "
+    domain = _detect_domain(sentence)
+
+    tokens = safe_word_tokenize(sentence, "en")
+    tagged = pos_tag(tokens, lang="eng")
+    head = _extract_head_noun(tagged)
+
+    if re.search(_REASON_HINT, s, re.I): return "why", "Why"
+    if re.search(_TIME_HINT, s, re.I):   return "when", "When"
+    if re.search(_QUANT_HINT, s, re.I):  return "how many", "How many"
+
+    if re.search(_SUPERLATIVE_HINT, s, re.I) or domain:
+        noun = None
+        if domain in ("planet", "city", "river", "language", "country"):
+            noun = domain
+        elif head and head[0].isupper():
+            noun = "entity"
+        elif head:
+            noun = head.lower()
+        noun = noun or "item"
+        return "which", f"Which {noun}"
+
+    if re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", sentence): return "who", "Who"
+    if re.search(_PLACE_HINT, s, re.I):  return "where", "Where"
+
+    if head: return "which", f"Which {head.lower()}"
+    return "what", "What"
+
+def _polish_question(q: str) -> str:
+    q = q.strip()
+    q = re.sub(r"\s+", " ", q)
+    q = q[0].upper() + q[1:] if q else q
+    if not q.endswith("?"):
+        q += "?"
+    q = q.replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+    q = re.sub(r"\b[Ii]s is\b", "is", q)
+    return q
+
+def _enforce_prefix(q: str, prefix: str) -> str:
+    q_clean = q.strip()
+    if not q_clean.lower().startswith(prefix.lower()):
+        if re.match(r"^(who|what|when|where|why|which|how)\b", q_clean, re.I):
+            q_clean = re.sub(r"^(who|what|when|where|why|which|how(\s+many)?)",
+                             prefix, q_clean, flags=re.I)
+        else:
+            q_clean = f"{prefix} {q_clean}"
+    return _polish_question(q_clean)
+
+def _is_low_quality(q: str) -> bool:
+    if len(q.split()) < 3: return True
+    if not q.endswith("?"): return True
+    if re.search(r"\b(where|what)\s+[A-Z][a-z]+\s+is\b", q, flags=re.I):
+        return True
+    return False
+
+def jaccard(a: str, b: str) -> float:
+    sa, sb = set(a.lower().split()), set(b.lower().split())
+    if not sa or not sb: return 0.0
+    return len(sa & sb) / len(sa | sb)
+
+# ===== Kannada quality helpers =====
+_KN_TIME = r"(ಶತಮಾನ|ವರ್ಷ|ತಿಂಗಳು|ವಾರ|ದಿನ|ಯುಗ|ಕಾಲ|ಆಯುಷ್ಯ|ಜನನ|ಮರಣ|\bಇಸಾಪೂರ್ವ\b|\bಕ್ರಿ\.ಶ\b|\bಕ್ರಿ\.ಪೂ\b|\b\d{3,4}\b)"
+_KN_PLACE = r"(ನಗರ|ಗ್ರಾಮ|ಪ್ರದೇಶ|ರಾಜ್ಯ|ದೇಶ|ಸ್ಥಳ|ನದಿ|ಪರ್ವತ|ತೀರ|ಭೂಖಂಡ|ಖಂಡ|ಸಮುದ್ರ|ಸ್ಥಿತ|ವಿರುವ)"
+_KN_REASON = r"(ಯಾಕೆಂದರೆ|ಕಾರಣ|ಹಾಗಾಗಿ|ಆದ್ದರಿಂದ|ಉದ್ದೇಶ|ಕಾರಣವಾಗಿ)"
+_KN_QUANT = r"(ಎಷ್ಟು|ಸಂಖ್ಯೆ|ಪ್ರಮಾಣ|\b\d+\b)"
+_KN_PERSON = r"(ವ್ಯಕ್ತಿ|ರಾಜ|ನಾಯಕ|ವಿಜ್ಞಾನಿ|ಲೇಖಕ|ಸಂಗೀತಗಾರ|ಸನ್ನ್ಯಾಸಿ|ಕವಿ)"
+
+_KN_DOMAIN = [
+    ("ಗ್ರಹ", r"(ಗ್ರಹ|ಬುಧ|ಶುಕ್ರ|ಭೂಮಿ|ಮಂಗಳ|ಗುರು|ಶನಿ|ಯುರೇನಸ್|ನೆಪ್ಟ್ಯೂನ್)"),
+    ("ನಗರ", r"(ನಗರ|ಹರಪ್ಪಾ|ಮೋಹೆಂಜೋದಾರೋ|ಬೆಂಗಳೂರ|ಮೈಸೂರು|ಮಂಗಳೂರು)"),
+    ("ನದಿ", r"(ನದಿ|ಗಂಗಾ|ಕಾವೇರಿ|ಸಿಂಧು|ನೈಲ್|ಅಮೆಜಾನ)"),
+    ("ಭಾಷೆ", r"(ಭಾಷೆ|ಕನ್ನಡ|ಹಿಂದಿ|ತಮಿಳು|ತೆಲುಗು|ಇಂಗ್ಲಿಷ್)"),
+    ("ದೇಶ", r"(ದೇಶ|ಭಾರತ|ಪಾಕಿಸ್ತಾನ|ಅಮೇರಿಕಾ|ಚೀನಾ|ಬ್ರೆಝಿಲ್)"),
+]
+
+def _kn_detect_domain(s: str):
+    for noun, pat in _KN_DOMAIN:
+        if re.search(pat, s, flags=re.I):
+            return noun
+    return None
+
+def choose_wh_and_prefix_kn(sentence: str):
+    s = " " + sentence.strip() + " "
+    if re.search(_KN_REASON, s): return "ಏಕೆ", "ಏಕೆ"
+    if re.search(_KN_TIME, s):   return "ಯಾವಾಗ", "ಯಾವಾಗ"
+    if re.search(_KN_QUANT, s):  return "ಎಷ್ಟು", "ಎಷ್ಟು"
+    dom = _kn_detect_domain(s)
+    if dom:                      return "ಯಾವ", f"ಯಾವ {dom}"
+    if re.search(_KN_PLACE, s):  return "ಎಲ್ಲಿ", "ಎಲ್ಲಿ"
+    if re.search(_KN_PERSON, s): return "ಯಾರು", "ಯಾರು"
+    return "ಏನು", "ಏನು"
+
+def _polish_kn(q: str) -> str:
+    q = re.sub(r"\s+", " ", q.strip())
+    if not q.endswith("?"): q += "?"
+    q = q.replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+    return q
+
+def _enforce_prefix_kn(q: str, prefix: str) -> str:
+    qc = q.strip()
+    starters = r"(ಯಾರು|ಏನು|ಯಾವಾಗ|ಎಲ್ಲಿ|ಏಕೆ|ಯಾವ|ಹೇಗೆ|ಎಷ್ಟು)"
+    if not re.match("^" + starters, qc):
+        qc = f"{prefix} {qc}"
+    else:
+        qc = re.sub("^" + starters, prefix, qc)
+    return _polish_kn(qc)
+
+# ---------- Question Generators ----------
 
 def generate_wh_question(sentence, lang_code):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if lang_code == "en":
-        wh = guess_wh_type(sentence)
-        # steer: ask for a specific WH starter
-        prompt = f"generate a {wh} question about: {sentence}"
+        wh, prefix = choose_wh_and_prefix(sentence)
+        prompt = (f"Ask a {wh} question that starts with '{prefix}' based on: {sentence}")
         inputs = tokenizer_en.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
-        # add a touch of sampling so it won’t collapse to “What…”
         outputs = model_en.generate(
-            inputs,
-            max_length=64,
-            num_beams=4,
-            do_sample=True,           # enable sampling
-            top_p=0.92,               # nucleus sampling
-            temperature=0.9,          # mild creativity
-            early_stopping=True
+            inputs, max_length=64, num_beams=4, do_sample=True, top_p=0.9, temperature=0.9, early_stopping=True
         )
-        question = tokenizer_en.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        raw_q = tokenizer_en.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        q = _enforce_prefix(raw_q, prefix)
+        if _is_low_quality(q):
+            q = prefix + ("?" if not prefix.endswith("?") else "")
+        return q
 
-        # If model ignored steering, lightly post-fix opening token
-        if not question.lower().startswith(tuple(WH_TYPES)):
-            question = question[0].upper() + question[1:]  # basic cleanup
-            opener = wh.capitalize()
-            if not question.endswith("?"):
-                question += "?"
-            if not question.lower().startswith(wh):
-                question = f"{opener} {question[0].lower() + question[1:]}"
-        return question
-
-    # Kannada model: it responds well to generic “question:” but has limited controllability.
-    # We keep it as-is; post-process only if needed.
-    prompt = f"question: {sentence}"
+    # Kannada
+    wh_kn, prefix_kn = choose_wh_and_prefix_kn(sentence)
+    prompt = f"Kannada question starting with '{prefix_kn}' about: {sentence}"
     inputs = tokenizer_kn.encode(prompt, return_tensors="pt", max_length=512, truncation=True).to(device)
     outputs = model_kn.generate(
-        inputs,
-        max_length=64,
-        num_beams=4,
-        do_sample=True,
-        top_p=0.92,
-        temperature=0.9,
-        early_stopping=True
+        inputs, max_length=64, num_beams=4, do_sample=True, top_p=0.92, temperature=0.9, early_stopping=True
     )
-    question = tokenizer_kn.decode(outputs[0], skip_special_tokens=True)
-    return question
+    raw_q = tokenizer_kn.decode(outputs[0], skip_special_tokens=True)
+    q = _enforce_prefix_kn(raw_q, prefix_kn)
+    if len(q.split()) < 3:
+        q = prefix_kn + "?"
+    return q
 
-def generate_true_false(sentence):
-    negation_patterns = [
-        (" is ", " is not "), (" are ", " are not "),
-        (" has ", " has not "), (" have ", " have not "),
-        (" was ", " was not "), (" were ", " were not ")
-    ]
-    if random.random() > 0.5:
-        tf_answer = "False"
-        for old, new in negation_patterns:
-            if old in sentence:
-                sentence = sentence.replace(old, new)
-                break
-    else:
-        tf_answer = "True"
-    return sentence, tf_answer
+_NUM_RE = re.compile(r"\b\d{1,4}\b")
+
+def _find_proper_nouns(tokens_pos):
+    return [w for w,t in tokens_pos if t in ("NNP","NNPS") and re.sub(r"\W+","",w)]
+
+def _flip_number(text):
+    def repl(m):
+        n = int(m.group(0))
+        delta = 1 if n < 50 else (10 if n < 1000 else 100)
+        return str(n + delta)
+    if _NUM_RE.search(text):
+        return _NUM_RE.sub(repl, text, count=1), True
+    return text, False
+
+def _negate_sentence_once(text):
+    patterns = [r"\bis\b", r"\bare\b", r"\bwas\b", r"\bwere\b", r"\bhas\b", r"\bhave\b"]
+    for p in patterns:
+        if re.search(p, text):
+            return re.sub(p, lambda m: m.group(0) + " not", text, count=1), True
+    return text, False
+
+# Kannada True/False helpers
+_KN_NEG_MAP = [
+    (r"\bಇದೆ\b", "ಇಲ್ಲ"),
+    (r"\bಇದ್ದಾರೆ\b", "ಇಲ್ಲ"),
+    (r"\bಇರುತ್ತದೆ\b", "ಇರುವುದಿಲ್ಲ"),
+    (r"\bಇರುವ\b", "ಇಲ್ಲದ"),
+    (r"\bಆಗಿದೆ\b", "ಆಗಿಲ್ಲ"),
+    (r"\bಸಂಭವಿಸಿದೆ\b", "ಸಂಭವಿಸಿಲ್ಲ"),
+]
+def _kn_negate_once(text: str):
+    for pat, rep in _KN_NEG_MAP:
+        if re.search(pat, text):
+            return re.sub(pat, rep, text, count=1), True
+    return text, False
+
+def generate_true_false_kn(sentence, paragraph_context=None):
+    if random.random() < 0.5:
+        return sentence, "True"
+    changed, ok = _flip_number(sentence)
+    if ok: return changed, "False"
+    changed, ok = _kn_negate_once(sentence)
+    if ok: return changed, "False"
+    return sentence, "True"
+
+def generate_true_false(sentence, paragraph_context=None):
+    if lang_code == "kn":
+        return generate_true_false_kn(sentence, paragraph_context)
+    if random.random() < 0.5:
+        return sentence, "True"
+    changed, ok = _flip_number(sentence)
+    if ok: return changed, "False"
+    changed, ok = _negate_sentence_once(sentence)
+    if ok: return changed, "False"
+    if paragraph_context:
+        toks = safe_word_tokenize(sentence, "en")
+        tagged = pos_tag(toks, lang="eng")
+        pns = _find_proper_nouns(tagged)
+        if pns:
+            ctx_tokens = safe_word_tokenize(paragraph_context, "en")
+            ctx_pns = _find_proper_nouns(pos_tag(ctx_tokens, lang="eng"))
+            pool = [p for p in set(ctx_pns) if p not in set(pns)]
+            if pool:
+                target = random.choice(pns)
+                subst  = random.choice(pool)
+                return re.sub(rf"\b{re.escape(target)}\b", subst, sentence, count=1), "False"
+    return sentence, "True"
+
+_WORD_RE = re.compile(r"[A-Za-z][A-Za-z\-’']+")
+
+def _content_words(sentence, stopset):
+    toks = safe_word_tokenize(sentence, "en")
+    tags = pos_tag(toks, lang="eng")
+    candidates = [w for w,t in tags if t in ("NNP","NNPS","NN","NNS")]
+    if not candidates:
+        candidates = [w for w in toks if len(w) > 3 and w.lower() not in stopset and _WORD_RE.fullmatch(w)]
+    return candidates
+
+def _content_words_kn(sentence, stopset):
+    toks = [t for t in re.split(r"\W+", sentence) if t]
+    toks = [t for t in toks if len(t) >= 4 and t not in stopset]
+    return toks
 
 def generate_fill_blank(sentence):
-    words = sentence.split()
-    candidate_words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
-    if not candidate_words:
-        return None, None
-    answer = random.choice(candidate_words)
-    question = sentence.replace(answer, "_____", 1)
-    return question, answer
+    if lang_code == "kn":
+        cands = _content_words_kn(sentence, STOP_WORDS_KN)
+        if not cands: return None, None
+        answer = random.choice(list(set(cands)))
+        q = re.sub(rf"\b{re.escape(answer)}\b", "_____", sentence, count=1)
+        return q, answer
+    cands = _content_words(sentence, stop_words)
+    if not cands: return None, None
+    answer = random.choice(list(set(cands)))
+    q = re.sub(rf"\b{re.escape(answer)}\b", "_____", sentence, count=1)
+    return q, answer
 
-def generate_mcq(sentence):
-    words = list(set(sentence.split()))
-    words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
-    if not words:
-        return None, None, None
-    answer = random.choice(words)
-    words.remove(answer)
-    if len(words) >= 3:
-        fake_options = random.sample(words, 3)
+def _is_number(tok): return bool(_NUM_RE.fullmatch(tok))
+
+def _nearby_numbers(n, k=3):
+    n = int(n)
+    deltas = [1,2,5] if n < 50 else [5,10,20]
+    opts = list({str(n+d) for d in deltas} | {str(max(1, n-d)) for d in deltas})
+    random.shuffle(opts)
+    return opts[:k]
+
+def _collect_pos_pools(paragraph):
+    toks = safe_word_tokenize(paragraph, "en")
+    tags = pos_tag(toks, lang="eng")
+    proper = [w for w,t in tags if t in ("NNP","NNPS")]
+    common = [w for w,t in tags if t in ("NN","NNS") and w.lower() not in STOP_WORDS_EN]
+    return list(set(proper)), list(set(common))
+
+def _generate_mcq_english(sentence, paragraph_context=None):
+    cands = _content_words(sentence, stop_words)
+    if not cands: return None, None, None
+    answer = random.choice(list(set(cands)))
+
+    if _is_number(answer):
+        distractors = _nearby_numbers(answer, k=3)
     else:
-        fake_options = words.copy()
-        dummy_options = ["Apple", "River", "Book", "Tree"] if lang_code == "en" else ["ಸೇಬು", "ನದಿ", "ಪುಸ್ತಕ", "ಮರ"]
-        fake_options.extend(dummy_options[:3 - len(fake_options)])
-    options = [answer] + fake_options
+        proper_pool, common_pool = _collect_pos_pools(paragraph_context or sentence)
+        if answer in proper_pool:
+            pool = [w for w in proper_pool if w != answer]
+        else:
+            pool = [w for w in common_pool if w.lower() != answer.lower()]
+        distractors = random.sample(pool, min(3, len(pool))) if pool else []
+
+    while len(distractors) < 3:
+        fillers = ["Apple", "River", "Book", "Tree"]
+        fillers = [f for f in fillers if f.lower() != answer.lower() and f not in distractors]
+        if not fillers: break
+        distractors.append(fillers.pop(0))
+
+    options = [answer] + distractors[:3]
+    options = list(dict.fromkeys(options))
     random.shuffle(options)
-    question = sentence.replace(answer, "_____", 1)
+    question = re.sub(rf"\b{re.escape(answer)}\b", "_____", sentence, count=1)
     return question, options, answer
 
-def generate_matching(sentences):
-    left, right = [], []
-    for sent in sentences:
-        tokens = safe_word_tokenize(sent, "en" if lang_code == "en" else "kn")
-        if lang_code == "en":
-            tagged = pos_tag(tokens, lang="eng")
-            nouns = [w for w, pos in tagged if pos.startswith("NN")]
-        else:
-            # simple KN heuristic: treat longer tokens as nouns
-            nouns = [t for t in tokens if len(t) >= 4]
-        if nouns:
-            left.append(sent)
-            right.append(random.choice(nouns))
-    if not left:
-        return []
-    shuffled_right = right.copy()
-    random.shuffle(shuffled_right)
-    return [{"left": l, "right": r} for l, r in zip(left, shuffled_right)]
+def generate_mcq(sentence, paragraph_context=None):
+    if lang_code == "kn":
+        cands = _content_words_kn(sentence, STOP_WORDS_KN)
+        if not cands: return None, None, None
+        answer = random.choice(list(set(cands)))
 
-def generate_questions_from_paragraph(paragraph, max_wh=5):
+        para_cands = _content_words_kn(paragraph_context or sentence, STOP_WORDS_KN)
+        pool = [w for w in set(para_cands) if w != answer]
+        distractors = random.sample(pool, min(3, len(pool))) if pool else []
+
+        fillers = ["ಸೇಬು", "ನದಿ", "ಪುಸ್ತಕ", "ಮರ", "ಪರ್ವತ", "ನಗರ"]
+        for f in fillers:
+            if len(distractors) >= 3: break
+            if f != answer and f not in distractors:
+                distractors.append(f)
+
+        options = [answer] + distractors[:3]
+        options = list(dict.fromkeys(options))
+        random.shuffle(options)
+        question = re.sub(rf"\b{re.escape(answer)}\b", "_____", sentence, count=1)
+        return question, options, answer
+
+    return _generate_mcq_english(sentence, paragraph_context)
+
+def generate_matching(sentences, max_pairs=5):
+    pairs = []
+    for s in sentences:
+        toks = safe_word_tokenize(s, "en" if lang_code == "en" else "kn")
+        if lang_code == "en":
+            tags = pos_tag(toks, lang="eng")
+            nouns = [w for w,t in tags if t in ("NNP","NNPS","NN","NNS")]
+        else:
+            nouns = [t for t in toks if len(t) >= 4]
+        if nouns:
+            term = random.choice(nouns)
+            right = s if len(s) <= 140 else s[:137] + "…"
+            pairs.append({"left": term, "right": right})
+    random.shuffle(pairs)
+    pairs = pairs[:max_pairs]
+    rights = [p["right"] for p in pairs]
+    random.shuffle(rights)
+    return [{"left": p["left"], "right": r} for p, r in zip(pairs, rights)]
+
+def _dedupe_wh(wh_list, sim_threshold=0.6):
+    kept = []
+    for q in wh_list:
+        if all(jaccard(q["question"], k["question"]) < sim_threshold for k in kept):
+            kept.append(q)
+    return kept
+
+# UPDATED: accept per-type limits
+def generate_questions_from_paragraph(paragraph, n_wh=5, n_tf=10, n_fb=10, n_mcq=10, n_match=5):
     sentences = simple_sent_tokenize(paragraph)
+
     questions = {"WH": [], "TrueFalse": [], "FillBlank": [], "MCQ": [], "Matching": []}
-    for idx, sent in enumerate(sentences):
-        if idx < max_wh:
-            questions["WH"].append({"question": generate_wh_question(sent, lang_code), "answer": sent})
-        tf_q, tf_a = generate_true_false(sent)
+
+    # WH: loop sentences until hit n_wh
+    for sent in sentences:
+        if len(questions["WH"]) >= n_wh: break
+        questions["WH"].append({"question": generate_wh_question(sent, lang_code), "answer": sent})
+    if questions["WH"]:
+        questions["WH"] = _dedupe_wh(questions["WH"])[:n_wh]
+
+    # True/False
+    for sent in sentences:
+        if len(questions["TrueFalse"]) >= n_tf: break
+        tf_q, tf_a = generate_true_false(sent, paragraph_context=paragraph)
         questions["TrueFalse"].append({"question": tf_q, "answer": tf_a})
+
+    # FillBlank
+    for sent in sentences:
+        if len(questions["FillBlank"]) >= n_fb: break
         fb_q, fb_a = generate_fill_blank(sent)
         if fb_q:
             questions["FillBlank"].append({"question": fb_q, "answer": fb_a})
-        mcq_q, options, mcq_a = generate_mcq(sent)
+
+    # MCQ
+    for sent in sentences:
+        if len(questions["MCQ"]) >= n_mcq: break
+        mcq_q, options, mcq_a = generate_mcq(sent, paragraph_context=paragraph)
         if mcq_q:
             questions["MCQ"].append({"question": mcq_q, "options": options, "answer": mcq_a})
-    questions["Matching"] = generate_matching(sentences)
+
+    # Matching
+    questions["Matching"] = generate_matching(sentences, max_pairs=n_match)
+
     return questions
 
 # ---------- Metrics ----------
@@ -304,12 +591,30 @@ if view_metrics:
 else:
     paragraph_input = st.text_area(UI_TEXT[lang_code]["input"], height=200)
 
+    # ====== NEW: per-type sliders (appear for both languages) ======
+    st.markdown(f"**{UI_TEXT[lang_code]['sliders_title']}**")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        n_wh   = st.slider(UI_TEXT[lang_code]["wh"],    min_value=0, max_value=5, value=3,  step=1)
+    with c2:
+        n_tf   = st.slider(UI_TEXT[lang_code]["tf"],    min_value=0, max_value=5, value=3,  step=1)
+    with c3:
+        n_fb   = st.slider(UI_TEXT[lang_code]["fb"],    min_value=0, max_value=5, value=3,  step=1)
+    with c4:
+        n_mcq  = st.slider(UI_TEXT[lang_code]["mcq"],   min_value=0, max_value=5, value=3,  step=1)
+    with c5:
+        n_match= st.slider(UI_TEXT[lang_code]["match"], min_value=0, max_value=5, value=2,  step=1)
+
+    # ====== Generate button ======
     if st.button(UI_TEXT[lang_code]["generate_btn"]):
         if paragraph_input.strip() == "":
             st.warning(UI_TEXT[lang_code]["warning"])
         else:
             with st.spinner("Generating questions..."):
-                qa_pairs = generate_questions_from_paragraph(paragraph_input)
+                qa_pairs = generate_questions_from_paragraph(
+                    paragraph_input,
+                    n_wh=n_wh, n_tf=n_tf, n_fb=n_fb, n_mcq=n_mcq, n_match=n_match
+                )
 
             # Expanders per type
             for qtype, qlist in qa_pairs.items():
