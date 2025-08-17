@@ -1,0 +1,3 @@
+[server]
+fileWatcherType = "none"   # disable inotify
+headless = true
