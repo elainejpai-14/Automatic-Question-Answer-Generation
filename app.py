@@ -2,7 +2,8 @@
 # Streamlit bilingual question generator (English/Kannada) with WH metrics
 
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoModelForSeq2SeqLM
+from transformers.models.auto import AutoTokenizer
 import torch
 import random
 import re
