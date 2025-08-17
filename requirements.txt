@@ -1,11 +1,16 @@
+# Streamlit & core libs
 streamlit>=1.32
 pandas
 nltk
+
+# NLP
+transformers>=4.40,<6
 sentencepiece
 sacrebleu>=2.4
 
+# Torch CPU wheels (smaller, compatible on Streamlit Cloud)
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.5.1
+torch==2.3.1
 
-transformers==4.44.2
+# (Optional but recommended for HF models)
 accelerate>=0.33
