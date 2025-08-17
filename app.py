@@ -27,6 +27,7 @@ def _ensure_nltk_data():
     os.makedirs(dl_dir, exist_ok=True)
     needed = [
         ("tokenizers/punkt", "punkt"),
+         ("tokenizers/punkt_tab/english", "punkt_tab"),
         ("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger"),
         ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
     ]
